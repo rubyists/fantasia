@@ -1,0 +1,30 @@
+[submodule "vendor/ash"]
+	path = vendor/ash
+	url = git@github.com:ash-project/ash
+[submodule "vendor/Continuum"]
+	path = vendor/Continuum
+	url = git@github.com:Yyeger/Continuum
+[submodule "vendor/oban"]
+	path = vendor/oban
+	url = git@github.com:oban-bg/oban
+[submodule "vendor/usage_rules"]
+	path = vendor/usage_rules
+	url = git@github.com:ash-project/usage_rules
+[submodule "vendor/drafter"]
+	path = vendor/drafter
+	url = git@github.com:jaman/drafter
+[submodule "vendor/marcli"]
+	path = vendor/marcli
+	url = git@github.com:Oeditus/marcli
+[submodule "vendor/optimus"]
+	path = vendor/optimus
+	url = git@github.com:savonarola/optimus
+[submodule "vendor/owl"]
+	path = vendor/owl
+	url = git@github.com:fuelen/owl
+[submodule "vendor/homebrew-tap"]
+	path = vendor/homebrew-tap
+	url = git@github.com:rubyists/homebrew-tap
+[submodule "vendor/stokowski"]
+	path = vendor/stokowski
+	url = git@github.com:Sugar-Coffee/stokowski

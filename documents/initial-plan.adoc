@@ -1,0 +1,1346 @@
+= Fantasia: Initial Plan for the Elixir Stokowski Port
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+[NOTE]
+====
+Status: initial proposal for iteration.
+
+This document describes the first compatibility release of Fantasia. It is a
+plan, not a claim that the listed work is already implemented.
+====
+
+== Purpose
+
+Port the behavior of +vendor/stokowski+ into the existing Elixir umbrella as
++apps/stokowski+, and ship the resulting product and command as +fantasia+.
+
+The port does not need to resemble the Python implementation internally. It
+does need to preserve the useful operator contract:
+
+* Linear issues drive autonomous work.
+* Work advances through an explicit, deterministic phase graph.
+* Every agent phase has its own prompt.
+* Every agent phase may independently select Claude Code or Codex, plus a
+  model supported by that runner.
+* Gates, rework loops, retries, workspaces, concurrency limits, recovery,
+  terminal controls, and the web dashboard remain available.
+* Existing Stokowski workflow files have a practical migration path.
+* The final artifact is installable as +fantasia+ from
+  +rubyists/homebrew-tap+.
+
+The first release is a behavioral compatibility release. It is not a
+line-for-line port, and accidental Python bugs are not compatibility
+requirements.
+
+== Scope and naming
+
+=== Product and application names
+
+[cols="1,2"]
+|===
+|Surface |Name
+
+|Umbrella/repository/release
+|Fantasia / +fantasia+
+
+|Public executable
+|+fantasia+
+
+|Umbrella child application
+|+:stokowski+ in +apps/stokowski+
+
+|Elixir namespace
+|+Stokowski.*+
+
+|Canonical workflow file
+|+workflow.yaml+
+
+|Homebrew formula
+|+rubyists/tap/fantasia+
+|===
+
+Keeping the internal application named Stokowski makes the source lineage and
+port boundary clear. Fantasia is the public product name. Existing structured
++stokowski:+ tracking comments must remain readable so an issue can migrate
+without restarting its workflow from the beginning.
+
+=== Goals for the initial compatibility release
+
+* Support the single-project and multi-project workflow schemas from
+  Stokowski 0.5.0.
+* Treat phase transitions as pure data, never as an inference from model text.
+* Support +agent+, +gate+, and +terminal+ phases, including cycles and bounded
+  rework.
+* Support +runner: claude+ and +runner: codex+ on every agent phase.
+* Retain three-layer prompt assembly: global prompt, phase prompt, and
+  generated lifecycle context.
+* Retain Linear polling, priority ordering, blocker checks, structured
+  tracking comments, and restart reconstruction.
+* Retain isolated per-issue workspaces and all five lifecycle hooks.
+* Retain retry backoff, turn timeout, stall timeout, cancellation, session
+  policy, and process-tree cleanup.
+* Retain global, per-project, and per-phase concurrency control.
+* Retain hot reload with deterministic boundaries.
+* Retain dry-run validation, interactive terminal controls, metrics, and the
+  local web dashboard/API.
+* Produce a self-contained release artifact suitable for Homebrew.
+
+=== Non-goals for the initial compatibility release
+
+* Reproducing Python module boundaries or asyncio behavior.
+* Adding issue trackers other than Linear.
+* Adding runners other than Claude Code and Codex.
+* Inferring phase completion or transitions from unstructured LLM output.
+* Requiring PostgreSQL, Oban, or a distributed BEAM cluster for the default
+  installation.
+* Guaranteeing exactly-once external side effects across a machine crash.
+  The existing system is at-least-once at that boundary as well.
+* Supporting every Jinja2 feature. The compatibility target is the syntax used
+  by the vendored prompts and documented template contract.
+* Redesigning the dashboard before compatibility is established.
+
+== Compatibility contract
+
+=== Sources of truth
+
+When the vendored implementation, examples, and documentation disagree, use
+this priority:
+
+. Explicit decisions recorded in this plan and subsequent ADRs.
+. The observable workflow contract in +vendor/stokowski/README.md+,
+  +workflow.example.yaml+, and +prompts/*.example.md+.
+. Characterization tests against the Python implementation where the
+  documentation is silent.
+. Python implementation details only when they expose intentional observable
+  behavior.
+
+Known contradictions must be resolved explicitly rather than copied:
+
+* The example prompts use nested variables such as +issue.identifier+, while
+  the Python renderer currently supplies flat variables such as
+  +issue_identifier+.
+* The documentation describes per-phase +max_turns+, while the current
+  state-machine path launches one process and does not consistently apply the
+  value.
+* Rework context exists in the prompt API, but the current orchestrator does
+  not consistently mark rework prompt assembly.
+* The documented per-state concurrency map uses internal phase names, while
+  the Python count is currently keyed from a Linear state in one path.
+
+Fantasia should implement the documented intent and ship conformance tests for
+the selected behavior. It should not preserve those contradictions.
+
+=== Initial parity ledger
+
+[cols="2,3,3"]
+|===
+|Capability |Fantasia contract |Acceptance evidence
+
+|Workflow loading
+|Auto-detect +workflow.yaml+, +workflow.yml+, then legacy +WORKFLOW.md+; resolve
+relative paths against the workflow directory.
+|Golden parser fixtures for canonical, legacy, single-project, and
+multi-project files.
+
+|Validation
+|Reject invalid phase types, missing agent prompts, bad transition targets,
+invalid runners, missing gate targets, missing entry/terminal phases, duplicate
+project names, unreadable prompt files, and invalid limits.
+|Table-driven validation tests and actionable dry-run output.
+
+|Deterministic phase graph
+|Only declared +complete+, +approve+, and +rework_to+ edges may advance a run.
+One successful phase execution emits at most one transition.
+|Pure transition tests plus Continuum golden-history replay tests.
+
+|Runner selection
+|Every agent phase selects +claude+ or +codex+ independently and may override
+model, timeouts, permissions, tools, session policy, and hooks.
+|The same synthetic workflow completes once with each fake runner and once
+with a mixed-runner graph.
+
+|Prompt assembly
+|Render global, phase, then generated lifecycle content with issue, phase,
+attempt, run, comments, and rework data.
+|Snapshot tests against the vendored prompt corpus.
+
+|Linear dispatch
+|Poll configured projects/states, paginate, normalize issues, sort by priority,
+creation time, then identifier, and skip unresolved blockers in the configured
+Todo state.
+|Mock GraphQL tests covering pagination, ordering, blockers, malformed
+responses, rate limiting, and errors.
+
+|Gates and rework
+|Enter the gate's mapped Linear state, wait without consuming an agent slot,
+advance on approval, increment the run on rework, and stop/escalate at
++max_rework+.
+|Scenario tests for approve, rework, direct-to-terminal approval, escalation,
+and restart while waiting.
+
+|Tracking and recovery
+|Linear tracking comments are the initial durable authority; reconstruct phase,
+run, and pending gate state after restart.
+|Restart scenarios from state, waiting-gate, approved, rework, malformed, and
+legacy tracking comments.
+
+|Workspaces
+|Create or reuse one safely named directory per issue, run +after_create+ once,
+and remove terminal workspaces after +before_remove+.
+|Temporary-directory tests, traversal tests, and crash/reuse scenarios.
+
+|Hooks
+|Support +after_create+, +on_stage_enter+, +before_run+, +after_run+, and
++before_remove+, with cwd, environment, timeout, output capture, and defined
+failure semantics.
+|Fake-shell integration tests for ordering, timeout, exit code, and redaction.
+
+|Runner lifecycle
+|Launch without a shell, stream output, collect result/session/usage data,
+detect stalls and wall-clock timeout, and terminate the complete process tree
+on cancellation or shutdown.
+|Fake executable tests, including a spawned grandchild process.
+
+|Sessions
+|Claude may inherit a prior session or start fresh. Codex uses only
+capabilities supported by its installed CLI; unsupported session inheritance
+is reported, never silently assumed.
+|Runner capability and argument-construction tests.
+
+|Retries
+|Classify failures, use bounded exponential backoff, preserve run identity,
+recheck eligibility before retry, and release all admission slots exactly once.
+|Deterministic clock tests and cancellation-race tests.
+
+|Reconciliation
+|Before new dispatch, stop work moved to terminal, gate, or unrelated Linear
+states; clean terminal workspaces and retain gate context.
+|Mock tracker scenarios while a fake runner is active.
+
+|Concurrency
+|Enforce global, per-project, and internal-phase limits fairly; paused projects
+do not claim new slots.
+|Concurrent scenario/property tests and snapshot assertions.
+
+|Multi-project
+|One service supervises independent project pollers with a shared global
+admission controller and aggregated observability.
+|Two-project tests for isolation, fairness, pause/resume, and separate secrets.
+
+|Hot reload
+|Validate a complete replacement before activation. In-flight phases keep
+their entry snapshot; new phase entries use the latest valid snapshot. Invalid
+reloads do not corrupt active runs.
+|Config-hash and last-known-good reload tests.
+
+|Terminal interface
+|Show running/retrying/gated/queued counts, tokens, activity, and project
+status; retain quit, status, pause, refresh, and help controls.
+|Headless UI tests plus non-TTY output snapshots.
+
+|Web interface
+|Retain state, issue lookup, log stream, refresh, pause, resume, and toggle
+endpoints, with a no-build local dashboard.
+|Route, JSON schema, SSE, and browser smoke tests.
+
+|Dry run
+|Validate configuration, show the normalized phase graph and projects, verify
+runners/prompts, and optionally query candidate issues without dispatch.
+|Offline and mocked-online CLI tests.
+
+|Update/version reporting
+|Report Fantasia version and perform a best-effort release check without
+blocking startup.
+|HTTP failure and semantic-version comparison tests.
+|===
+
+== Default deterministic workflow
+
+The initial example should preserve the existing eight-phase workflow. YAML
+continues to use the +states:+ key for compatibility, while the Elixir domain
+model calls these entries phases.
+
+[cols="2,1,2,2,2"]
+|===
+|Phase |Type |Prompt |Runner |Next action
+
+|+investigate+
+|agent
+|+prompts/investigate.md+
+|Claude by default; Claude or Codex allowed
+|+complete -> research-review+
+
+|+research-review+
+|gate
+|Human gate description only
+|none
+|+approve -> implement+; +rework_to -> investigate+
+
+|+implement+
+|agent
+|+prompts/implement.md+
+|Claude by default; Claude or Codex allowed
+|+complete -> implementation-review+
+
+|+implementation-review+
+|gate
+|Human gate description only
+|none
+|+approve -> code-review+; +rework_to -> implement+
+
+|+code-review+
+|agent
+|+prompts/review.md+
+|Claude or Codex; the example should demonstrate an easy Codex switch
+|+complete -> merge-review+
+
+|+merge-review+
+|gate
+|Human gate description only
+|none
+|+approve -> merge+; +rework_to -> implement+
+
+|+merge+
+|agent
+|+prompts/merge.md+
+|Claude by default; Claude or Codex allowed
+|+complete -> done+
+
+|+done+
+|terminal
+|none
+|none
+|Move to the first configured terminal Linear state and clean up
+|===
+
+The graph is configurable. Determinism means that, for a given normalized
+configuration snapshot and event sequence, the next phase and emitted effects
+are the same. It does not mean every project must use the default graph.
+
+=== Phase identity and transition rules
+
+Every attempt has a stable identity:
+
+[source,text]
+----
+{project, issue_id, workflow_hash, phase, run, attempt}
+----
+
+* +run+ starts at 1 and increments only when a gate requests rework.
+* +attempt+ starts at 1 and increments only for execution retry within that
+  phase run.
+* A phase's runner exits successfully before +complete+ is applied.
+* A non-zero exit, timeout, stall, hook failure, or lost runner is a classified
+  failure and does not advance the graph.
+* A gate consumes a named external decision event. Moving a Linear issue is
+  translated into that event by the tracker boundary.
+* A terminal event can cancel any non-terminal phase.
+* LLM prose is observability data, not control data.
+
+=== Tick ordering
+
+Each project tick performs work in a stable order:
+
+. Load and validate a candidate configuration; activate only a fully valid
+  snapshot.
+. Reconcile running issues against Linear.
+. Reconcile pending gates, approvals, rework, and terminal moves.
+. Fetch and normalize candidates.
+. Sort candidates by priority, creation time, and identifier.
+. Resolve each issue's persisted phase/run.
+. Check eligibility and blockers.
+. Acquire global, project, and phase admission.
+. Start at most one phase attempt for each admitted issue.
+
+Tests use an injected clock and deterministic ordering. Wall-clock time,
+random IDs, environment reads, filesystem access, network access, and process
+execution stay outside the pure transition module.
+
+== Persistence and Continuum
+
+=== Initial decision
+
+Use vendored Continuum as the deterministic workflow/activity boundary, with
+its in-memory journal in the default compatibility release.
+
+* One issue maps to one Continuum workflow run while the service is alive.
+* Agent work, Linear mutations, hooks, and workspace operations are Continuum
+  activities.
+* Human gate decisions and external terminal moves enter as signals.
+* The normalized workflow snapshot and its hash are immutable input to an
+  in-flight phase.
+* Continuum golden histories verify replay stability as the Elixir code
+  evolves.
+
+Linear comments and the workspace remain the cross-restart recovery authority
+for the initial release. On boot, Fantasia reconstructs active issue runs from
+Linear and resumes at the persisted phase boundary. This preserves Stokowski's
+no-database operational model and keeps +brew install fantasia+ useful without
+installing PostgreSQL.
+
+[IMPORTANT]
+====
+In-memory Continuum history does not make external activities exactly-once
+across a VM or machine crash. Activities must use stable idempotency keys where
+the external API permits it, and recovery must inspect committed Linear
+tracking before repeating work.
+====
+
+=== Later durable mode
+
+A later, opt-in mode may use Continuum's PostgreSQL journal and optionally its
+Oban activity executor. That mode should be introduced only after:
+
+* the no-database parity suite passes;
+* migration between recovery authorities is specified;
+* duplicate execution and fencing behavior are tested with long-lived CLI
+  subprocesses;
+* Homebrew users are not surprised by an implicit database dependency.
+
+Oban is therefore not part of the initial default runtime.
+
+== Proposed Elixir architecture
+
+[source,text]
+----
+Stokowski.Application
+|
++-- Stokowski.Config.Manager
+|   +-- parses, validates, hashes, and hot-reloads workflow snapshots
+|
++-- Stokowski.Admission
+|   +-- global/project/phase slot ownership and pause state
+|
++-- Stokowski.ProjectSupervisor
+|   +-- Stokowski.Project (one per configured Linear project)
+|       +-- poll/reconcile loop
+|       +-- gate signal translation
+|       +-- Stokowski.IssueSupervisor
+|           +-- one supervised Continuum flow per active issue
+|
++-- Stokowski.RunnerSupervisor
+|   +-- Claude and Codex Port workers with process-tree ownership
+|
++-- Stokowski.Observability
+|   +-- event bus, metrics, bounded log buffer, terminal and web read model
+|
++-- Stokowski.Web (optional)
+    +-- local dashboard, JSON API, and SSE log stream
+----
+
+=== Core modules
+
+[cols="2,4"]
+|===
+|Module/namespace |Responsibility
+
+|+Stokowski.Domain+
+|Typed values for issue, project, phase, transition, workflow snapshot,
+attempt identity, runner request/result, gate decision, and failure.
+
+|+Stokowski.Config+
+|YAML and legacy front-matter parsing, environment resolution, defaults,
+normalization, graph validation, prompt validation, and snapshot hashing.
+
+|+Stokowski.PhaseMachine+
+|Pure reducer from current phase plus a typed event to next state plus a list
+of required effects.
+
+|+Stokowski.Flow+
+|Generic Continuum workflow interpreter for the normalized phase graph.
+
+|+Stokowski.Tracker+
+|Behavior for candidate fetch, state lookup, comments, and mutations.
+
+|+Stokowski.Tracker.Linear+
+|Linear GraphQL adapter, pagination, response validation, timeouts, retries,
+and normalization.
+
+|+Stokowski.Tracking+
+|Versioned structured comments, legacy parser, recent-comment filtering, and
+recovery projection.
+
+|+Stokowski.Prompt+
+|Template compatibility layer and deterministic three-part prompt assembly.
+
+|+Stokowski.Workspace+
+|Path safety, create/reuse/remove lifecycle, and hook execution.
+
+|+Stokowski.Runner+
+|Behavior and normalized request/result/error contract.
+
+|+Stokowski.Runner.Claude+
+|Claude Code argument construction, streaming JSON event decoding, session and
+token extraction.
+
+|+Stokowski.Runner.Codex+
+|Codex argument construction, supported output decoding, result and usage
+normalization.
+
+|+Stokowski.Command+
+|Port ownership, bounded output, timeout/stall timers, environment filtering,
+and process-tree termination.
+
+|+Stokowski.Admission+
+|Atomic slot leases with exactly-one release, fairness, queue reasons, and
+pause/resume.
+
+|+Stokowski.Projection+
+|Read model for CLI/TUI/web snapshots. It consumes events rather than reaching
+into process state.
+
+|+Stokowski.CLI+
+|Optimus command definitions, startup, validation, doctor, and exit codes.
+
+|+Stokowski.TUI+
+|Interactive status and keyboard controls.
+
+|+Stokowski.Web+
+|Loopback dashboard, JSON API, SSE logs, and project controls.
+|===
+
+=== Side-effect behaviors
+
+Pure logic should depend on behaviors rather than global modules:
+
+* +Stokowski.Tracker+
+* +Stokowski.Runner+
+* +Stokowski.Workspace.Adapter+
+* +Stokowski.Command+
+* +Stokowski.Clock+
+* +Stokowski.EventSink+
+
+This makes workflow tests deterministic and allows integration tests to use
+fake runners and a fake Linear server without invoking paid agents.
+
+== Configuration plan
+
+=== Compatibility
+
+The initial parser accepts the Stokowski 0.5.0 keys:
+
+* +tracker+
+* +linear_states+
+* +polling+
+* +workspace+
+* +hooks+
+* +claude+
+* +agent+
+* +prompts+
+* +server+
+* +states+
+* +projects+
+
+Single-project configuration is normalized into the same project structure as
+multi-project configuration. Top-level defaults are merged before validation,
+and the normalized result no longer depends on YAML map implementation
+details, except that the first declared agent phase remains the legacy entry
+phase.
+
+Environment references such as +$LINEAR_API_KEY+ remain supported. Credential
+values must be represented as redacted secret values after parsing and must
+never appear in inspect output, logs, dashboard JSON, crash reports, or runner
+argument diagnostics.
+
+=== Validation policy
+
+Validation happens before the application starts and before a hot-reloaded
+snapshot becomes active.
+
+* Unknown keys produce warnings in the first compatibility release so old
+  files do not fail unnecessarily.
+* Invalid graph semantics are errors.
+* Missing runner executables are errors for +doctor+ and warnings for offline
+  +validate+; they are hard errors before dispatch to that runner.
+* Missing or unreadable agent prompt files are errors.
+* A gate requires +rework_to+ and an +approve+ transition.
+* Every transition target must exist.
+* At least one agent phase and one terminal phase must exist.
+* Runner values are limited to +claude+ and +codex+.
+* Limits and timeouts must be non-negative and internally consistent.
+* Duplicate Linear state mappings that make a gate decision ambiguous are
+  rejected.
+* Unreachable phases are warnings initially and may become errors later.
+
+=== Hot reload semantics
+
+The configuration manager retains a last-known-good snapshot.
+
+* A new snapshot activates atomically only after parse, prompt, graph, and
+  project validation.
+* Reconciliation continues if a replacement file is invalid.
+* No new work is admitted from an invalid replacement.
+* An active phase retains the snapshot hash it entered with.
+* A phase boundary may adopt the latest valid snapshot only if its current
+  phase and required transition still exist; otherwise the issue is paused and
+  surfaced as a configuration conflict.
+* Concurrency changes apply to new claims; they never kill valid work merely
+  because a cap was lowered.
+
+== Prompt contract
+
+=== Assembly order
+
+. Optional global prompt.
+. Required prompt for the current agent phase.
+. Generated Fantasia lifecycle section.
+
+The lifecycle section includes issue identity, URL, internal phase, run,
+attempt, available transitions, recent non-tracking comments, explicit rework
+feedback, and completion instructions. Timestamps and comments are sorted
+before rendering.
+
+=== Template compatibility
+
+Support the Jinja-style subset used by the vendored prompt corpus:
+
+* nested values such as +issue.identifier+ and +issue.description+;
+* documented flat aliases such as +issue_identifier+ and
+  +issue_description+;
+* +if+, +else+, and +endif+;
+* the +lower+ filter;
+* list/string rendering used for labels;
+* missing values rendering as empty/false for compatibility.
+
+The implementation may use a BEAM template library or a small compatibility
+renderer. The choice is accepted only after the entire vendored prompt corpus
+passes snapshot tests. Arbitrary code execution from prompt templates is not
+allowed.
+
+The nested issue object should expose:
+
+* +id+
+* +identifier+
+* +title+
+* +description+
+* +url+
+* +priority+
+* +state+
+* +branch+
+* +labels+
+
+Phase metadata exposes +state_name+ as a compatibility alias, plus +phase+,
++run+, +attempt+, and +last_run_at+.
+
+=== Prompt safety
+
+* Resolve relative prompt paths within the workflow directory.
+* Reject path traversal outside the workflow directory by default; allow
+  explicit absolute paths only through an opt-in.
+* Bound prompt and comment size with visible truncation metadata.
+* Do not interpolate credentials into prompts.
+* Provide +fantasia prompt+ to preview the exact rendered prompt without
+  launching a runner.
+
+== Tracking and recovery
+
+=== Comment compatibility
+
+The initial release reads the existing markers:
+
+[source,html]
+----
+<!-- stokowski:state {...} -->
+<!-- stokowski:gate {...} -->
+----
+
+The safest migration is to keep writing these markers during the compatibility
+release while changing the human-readable label to Fantasia. If a new marker
+is introduced, the parser must dual-read both formats and the payload must
+carry an explicit schema version.
+
+Tracking payloads include enough information to project:
+
+* project and issue;
+* workflow snapshot hash;
+* phase;
+* run and attempt;
+* gate status;
+* timestamp;
+* rework target;
+* stable effect/idempotency identifier where applicable.
+
+Parsers ignore malformed or unrelated HTML comments and select the latest
+valid event by normalized timestamp plus Linear comment order. Recovery never
+executes data embedded in a comment.
+
+=== Recovery algorithm
+
+. Fetch terminal issues and clean any remaining workspaces safely.
+. Fetch issues in all configured gate states and rebuild pending gate
+  projections.
+. Fetch active candidates.
+. Read tracking comments and select the latest valid phase boundary.
+. Compare the persisted phase and workflow hash with the latest valid config.
+. Reconstruct a Continuum run at that boundary, or surface a configuration
+  conflict without dispatching.
+. Reconcile the current Linear state before acquiring a slot.
+
+== Runner contract
+
+=== Normalized request
+
+Both adapters receive:
+
+* stable attempt identity;
+* executable and model;
+* fully assembled prompt;
+* workspace cwd;
+* filtered environment;
+* permission/tool policy;
+* turn and stall timeouts;
+* session policy and prior session identifier;
+* output/event callback.
+
+Both return a normalized result containing status, exit code, session
+identifier if supported, input/output/total tokens when available, last
+message, timing, and bounded diagnostics.
+
+=== Claude adapter
+
+The compatibility target is the current Claude Code headless protocol:
+
+* prompt mode;
+* verbose streaming JSON;
+* first-turn headless system instructions;
+* optional model;
+* automatic or allowed-tools permission mode;
+* session resume for +inherit+;
+* result-event session and usage extraction.
+
+Runner flags must be capability-tested against the installed executable in
++fantasia doctor+. Argument construction is versioned behind the adapter so a
+Claude CLI change does not alter phase semantics.
+
+=== Codex adapter
+
+The Codex adapter supports the installed Codex CLI's non-interactive execution
+mode, model selection, output streaming, and exit status. The exact CLI flags
+must be selected in the initial runner spike and pinned with fake-executable
+fixtures because the vendored Python flags are an implementation detail, not
+the durable workflow contract.
+
+If the installed Codex version cannot resume sessions or report token usage,
+the result explicitly records those capabilities as unavailable. Fantasia must
+not fabricate a session or token count.
+
+=== Process safety
+
+* Runner arguments use +Port+ or an equivalent direct exec boundary, never a
+  shell.
+* Hooks are the only intentional shell surface.
+* The Port owner also owns timeout and stall timers.
+* Read stdout and stderr concurrently with bounded buffers.
+* Start runners in an isolated OS process group/session where supported.
+* Graceful cancellation is attempted first, followed by bounded termination
+  and kill of the process tree.
+* Supervisor restart must not orphan a paid agent process.
+* Secrets are masked from command diagnostics and hook output.
+
+== Workspace and hooks
+
+Workspace keys retain the safe +[A-Za-z0-9._-]+ behavior and must resolve
+strictly under the configured root. Symlink escapes are rejected.
+
+Hook order for an agent phase is:
+
+. +after_create+ when a new workspace is first created.
+. phase-specific +on_stage_enter+ once per phase run.
+. +before_run+ for each runner attempt.
+. runner execution.
+. +after_run+ for every started runner attempt, with success/failure metadata
+  available in the environment.
+. +before_remove+ before terminal cleanup.
+
+The plan must define hook failure semantics:
+
+* +after_create+, +on_stage_enter+, and +before_run+ failures fail the attempt.
+* +after_run+ failure is a failed quality gate and must not advance the phase.
+* +before_remove+ failure is logged and surfaced, but cleanup policy is
+  configurable so an operator can preserve a workspace for diagnosis.
+
+Hook scripts receive a documented environment containing issue, project,
+phase, run, attempt, workspace, and Linear connection metadata. Secret
+inheritance is minimized rather than copying the daemon's entire environment
+blindly.
+
+== Concurrency, retry, and cancellation
+
+Admission returns a lease token. All normal completion, timeout, cancellation,
+gate entry, process crash, and supervisor termination paths release that token
+idempotently.
+
+Limits are keyed by:
+
+* one global maximum;
+* an optional project maximum;
+* an optional internal phase maximum.
+
+Queue ordering begins with the stable candidate ordering. A round-robin
+project cursor prevents a large project from permanently starving a smaller
+project when both have eligible work.
+
+Retry defaults remain compatible:
+
+[source,text]
+----
+delay = min(10_000 * 2^(attempt - 1), max_retry_backoff_ms)
+----
+
+The clock and scheduler are injected in tests. Before retry, Fantasia fetches
+fresh issue state, re-resolves the current phase boundary, and reacquires
+admission. Terminal, gate, pause, and unrelated states cancel the retry.
+
+== Terminal, CLI, and web surfaces
+
+=== CLI
+
+Optimus should provide the compatibility invocation:
+
+[source,sh]
+----
+fantasia [workflow.yaml] [--host HOST] [--port PORT] [-v] [--dry-run]
+----
+
+Additive commands make operation and packaging easier:
+
+[source,sh]
+----
+fantasia run [workflow.yaml]
+fantasia validate [workflow.yaml]       # offline parse/graph/prompt checks
+fantasia dry-run [workflow.yaml]        # optional Linear candidate query
+fantasia doctor [workflow.yaml]         # runner, auth, filesystem, and network checks
+fantasia prompt ISSUE --phase PHASE     # exact prompt preview
+fantasia version
+----
+
+No-argument workflow discovery remains +workflow.yaml+, +workflow.yml+, then
++WORKFLOW.md+. Exit codes are documented and stable for automation.
+
+=== Terminal UI
+
+Use Owl for ordinary logs, tables, non-TTY output, and a lightweight live
+status line. Evaluate Drafter for the interactive multi-project view and
+headless keyboard testing during the packaging spike. If Drafter's NIF or
+full-screen behavior creates release risk, the parity UI remains Owl-based and
+Drafter moves behind +--tui+ until the release matrix passes.
+
+Required controls remain:
+
+* +q+: graceful shutdown;
+* +s+: status;
+* +p+: select and pause/resume a project;
+* +r+: force a poll;
+* +h+: help.
+
+Marcli may render Markdown prompt previews and issue detail in the terminal;
+it must not become part of orchestration logic.
+
+=== Web dashboard
+
+Keep a build-free dashboard served only when a port is configured. Default
+binding is +127.0.0.1+.
+
+Compatibility endpoints:
+
+* +GET /+
+* +GET /api/v1/state+
+* +GET /api/v1/logs/stream+
+* +GET /api/v1/:issue_identifier+
+* +POST /api/v1/refresh+
+* +POST /api/v1/projects/:project_name/pause+
+* +POST /api/v1/projects/:project_name/resume+
+* +POST /api/v1/projects/:project_name/toggle+
+
+The state projection includes projects, pool limits, running attempts,
+retries, gates, queued issues and reasons, tokens, elapsed time, last activity,
+and generated timestamp. The server must not expose API keys, prompts,
+unredacted hook output, or environment values.
+
+Binding to a non-loopback address should emit a prominent warning. Dashboard
+authentication is a post-parity feature unless non-loopback binding becomes a
+supported deployment mode.
+
+== Vendored Elixir libraries
+
+Path dependencies keep implementation work pinned to the checked-in submodule
+commits. Vendoring does not mean every library should own the same concern.
+Continuum, Oban, and Ash in particular overlap if used indiscriminately.
+
+[cols="2,2,4"]
+|===
+|Library |Initial disposition |Role and constraint
+
+|Continuum 0.7.1
+|Adopt
+|Deterministic workflow/activity/signal boundary and golden-history replay.
+Use the in-memory journal initially; PostgreSQL is opt-in later.
+
+|Optimus 0.6.0
+|Adopt
+|CLI argument and command validation.
+
+|Owl 0.13.1
+|Adopt
+|Logs, tables, progress/status output, and non-TTY-safe terminal presentation.
+
+|Drafter 0.3.2
+|Conditional adoption
+|Interactive TUI and headless UI tests if its OTP/NIF packaging passes every
+required release target. Owl remains the fallback.
+
+|Marcli 0.4.1
+|Narrow adoption
+|Markdown rendering for prompt preview and terminal details only.
+
+|UsageRules 1.2.7
+|Development-only
+|Generate dependency usage guidance once dependencies are wired. It is not a
+runtime dependency or part of the Homebrew artifact.
+
+|Oban 2.23 development snapshot
+|Defer
+|Optional Continuum activity executor for a future PostgreSQL durable mode.
+It duplicates initial scheduling/retry responsibilities otherwise.
+
+|Ash 3.31.3 development snapshot
+|Defer pending an ADR
+|Consider only if a persistent/queryable operational domain is added. Do not
+pull in Ash solely to replace small typed structs or the pure phase reducer.
+|===
+
+Additional focused dependencies will still be necessary for YAML, HTTP,
+template compatibility, JSON, and the web server. Select them in the contract
+spike using these criteria:
+
+* active support for Elixir 1.20 and the selected OTP versions;
+* no unnecessary native build dependency;
+* deterministic, testable APIs;
+* licenses compatible with Fantasia distribution;
+* clean inclusion in a self-contained release;
+* explicit direct dependency rather than relying on Continuum transitively.
+
+During local development, +apps/stokowski/mix.exs+ uses relative path
+dependencies into +vendor/+. CI always checks out submodules recursively and
+records their exact commits. Release artifacts contain compiled dependency
+code and notices; the Homebrew formula must not need the submodules at install
+time.
+
+== Testing strategy
+
+=== Contract fixtures
+
+Copy, do not mutate, representative inputs from +vendor/stokowski+ into test
+fixtures with provenance:
+
+* canonical and legacy workflow files;
+* all example prompt templates;
+* Linear issue/comment payloads;
+* Claude stream-json events;
+* Codex output/exit scenarios;
+* structured state and gate comments;
+* dashboard snapshot shapes.
+
+Where practical, run the same fixture through Python Stokowski and Fantasia.
+Intentional differences are documented beside the fixture.
+
+=== Test layers
+
+[cols="2,4"]
+|===
+|Layer |Coverage
+
+|Pure unit tests
+|Phase reduction, config merging, graph validation, ordering, limits,
+tracking parsing, comment filtering, backoff, and failure classification.
+
+|Property tests
+|Arbitrary valid phase graphs, cycles, rework bounds, admission acquire/release
+sequences, and malformed tracking data.
+
+|Prompt snapshots
+|Every vendored prompt with first-run, missing-description, comments, and
+rework contexts; nested and flat aliases must agree.
+
+|Continuum replay
+|Golden histories for straight-through, gate approval, rework, retry,
+terminal cancellation, and config-version boundary.
+
+|Adapter tests
+|Mock Linear GraphQL server, temporary filesystem, fake clock, fake command
+runner, fake Claude NDJSON executable, and fake Codex executable.
+
+|Supervision/failure tests
+|Project crash, issue worker crash, runner owner crash, service shutdown,
+orphan cleanup, invalid reload, and network partition.
+
+|End-to-end local tests
+|Temporary git repository, fake Linear server, mixed fake runners, web API,
+and terminal projection.
+
+|Opt-in live tests
+|A designated Linear sandbox plus installed/authenticated Claude and Codex
+CLIs. These never run on ordinary pull requests or consume tokens implicitly.
+
+|Release tests
+|Run the packaged artifact on every target, execute +version+, offline
++validate+, TUI/non-TTY smoke, NIF load if present, and graceful runner-tree
+shutdown.
+|===
+
+No test may require a real paid LLM unless it is explicitly tagged and enabled
+by an operator.
+
+== Delivery plan
+
+Phases 0 through 5 together constitute the initial compatibility release.
+Phase 6 publishes that completed release through Homebrew.
+
+=== Phase 0: contract and distribution spikes
+
+Deliver:
+
+* ADR for the normative compatibility rules and known Python contradictions.
+* Characterization fixtures for config, prompts, tracking, runners, and API
+  snapshots.
+* A generic Continuum proof: agent activity, gate signal, rework loop, terminal
+  completion, and reconstruction from a persisted boundary.
+* A direct-exec Port proof that terminates a child and grandchild process.
+* Claude and Codex capability probes using fake executables first and local
+  installed CLIs only when available.
+* A distribution proof for the preferred self-contained artifact on macOS
+  arm64 and Linux x86_64.
+* A Drafter/NIF packaging decision.
+
+Exit criteria:
+
+* The compatibility ledger is testable.
+* Continuum can represent the dynamic normalized phase graph without making
+  workflow replay depend on mutable configuration.
+* The packaged +fantasia version+ runs without a development checkout.
+* Remaining library and packaging choices are recorded, not implicit.
+
+=== Phase 1: deterministic core
+
+Implement:
+
+* domain structs and typed events;
+* YAML/legacy parsing, normalization, validation, and hashing;
+* pure phase machine;
+* prompt compatibility and lifecycle assembly;
+* structured tracking parser/writer;
+* Continuum flow and activities with fake side effects;
+* default workflow and prompt examples branded for Fantasia.
+
+Exit criteria:
+
+* The complete eight-phase example runs with fake activities.
+* Straight-through, approval, rework, escalation, and terminal histories replay
+  without drift.
+* All vendored prompt examples render correctly.
+
+=== Phase 2: external adapters
+
+Implement:
+
+* Linear GraphQL adapter and response normalization;
+* safe workspace lifecycle;
+* hook command boundary;
+* Claude runner;
+* Codex runner;
+* process output, timeouts, stalls, cancellation, session, and token metrics;
+* environment construction and redaction.
+
+Exit criteria:
+
+* A fake Linear issue completes the entire mixed-runner workflow in a temporary
+  git workspace.
+* Failure injection leaves no runner or grandchild process behind.
+* No secret appears in captured logs or snapshots.
+
+=== Phase 3: supervised orchestration and recovery
+
+Implement:
+
+* application and project supervision;
+* project poll/reconcile loops;
+* admission controller and queue reasons;
+* retry scheduler;
+* gate decision signaling;
+* hot reload with last-known-good snapshots;
+* startup cleanup and reconstruction;
+* multi-project aggregation and pause/resume.
+
+Exit criteria:
+
+* Crash/restart scenarios recover from Linear boundaries.
+* Global/project/phase limits hold under concurrency and cancellation races.
+* Two projects run fairly without leaking config, workspaces, or credentials.
+
+=== Phase 4: operator surfaces
+
+Implement:
+
+* Optimus CLI and compatibility invocation;
+* offline validate, online dry-run, doctor, prompt preview, and version;
+* Owl terminal output and keyboard controls;
+* Drafter interactive view if Phase 0 approved it;
+* web dashboard, JSON projection, SSE logs, and project controls;
+* best-effort update check.
+
+Exit criteria:
+
+* CLI exit codes and non-TTY output are stable.
+* The terminal and web views consume the same projection and agree on counts.
+* All compatibility API routes pass schema tests.
+
+=== Phase 5: parity hardening and migration
+
+Complete:
+
+* every item in the parity ledger;
+* old tracking-comment recovery;
+* canonical workflow migration documentation;
+* security review of hook, prompt, environment, HTTP, and path boundaries;
+* resource bounds and log redaction;
+* opt-in live Linear/Claude/Codex smoke runs;
+* operator documentation, examples, troubleshooting, and upgrade notes;
+* third-party license/NOTICE inventory.
+
+Exit criteria:
+
+* No open initial-parity ledger item.
+* The same sandbox issue can be stopped under Python Stokowski and safely
+  resumed under Fantasia at a phase boundary.
+* +mix test+ and the project quality task pass from a clean recursive checkout.
+
+=== Phase 6: release and Homebrew publication
+
+Complete the release process described below. Publication is performed only
+after Phase 5 is green.
+
+== Release and Homebrew plan
+
+=== Artifact contract
+
+Prefer a self-contained executable distribution that bundles ERTS and all
+runtime assets. A Burrito-style artifact is the leading option, subject to the
+Phase 0 spike; a self-contained Mix release with a purpose-built CLI launcher
+is the fallback. A runtime dependency on a separately installed developer
+Elixir is not the preferred user experience.
+
+The formula contract is independent of the bundler:
+
+* installed command is +fantasia+;
+* +fantasia version+ works offline;
+* +fantasia validate+ works offline against an included minimal fixture;
+* prompt/dashboard/static assets and NIFs are present;
+* Claude and Codex remain external runtime prerequisites and are detected by
+  +doctor+, not bundled;
+* the artifact contains license and third-party notice files.
+
+Initial required targets should match the current tap's proven minimum:
+
+* macOS arm64;
+* Linux x86_64.
+
+Add macOS x86_64 and Linux arm64 once CI runners and the complete dependency
+set pass. The target matrix must be finalized in Phase 0 before public release.
+
+=== Versioning
+
+Use one Fantasia semantic version as the source for:
+
+* umbrella/release metadata;
+* +fantasia version+;
+* Git tag +vX.Y.Z+;
+* GitHub release;
+* Homebrew formula +.version+.
+
+Do not derive the public version independently inside +apps/stokowski+.
+
+=== Release pipeline
+
+. Verify clean recursive submodule checkout and exact vendor commits.
+. Run format, compile with warnings as errors, unit/integration/replay tests,
+  static checks, dependency/license audit, and release smoke tests.
+. Build on each native target.
+. Archive artifacts with OS/architecture in stable names.
+. Generate SHA-256 checksums and an artifact manifest.
+. Create the GitHub release and upload artifacts, checksums, notices, example
+  workflow, and migration notes.
+. Open an automated pull request against +rubyists/homebrew-tap+ updating the
+  Fantasia formula version, URLs, and checksums.
+. Run +brew audit+, +brew style+, install, and formula tests on supported
+  targets.
+. Merge the tap PR only after all release artifacts and tests are available.
+
+=== Tap layout
+
+Follow the convention already vendored for +linear-cli+:
+
+[source,text]
+----
+vendor/homebrew-tap/
+  Formula/
+    fantasia/
+      .version
+      fantasia.rb
+----
+
+The formula should:
+
+* use the GitHub release artifact for the current +.version+;
+* select URL and checksum by supported OS/architecture;
+* install the artifact under +libexec+ when it contains a release tree and
+  link only the public launcher into +bin+;
+* declare Fantasia's actual license;
+* test +fantasia version+ and offline validation;
+* avoid build-time network dependency resolution.
+
+The release workflow should update the real tap repository through a pull
+request. Updating only the vendored submodule working tree or its pointer is
+not a publication mechanism.
+
+=== Installation acceptance
+
+[source,sh]
+----
+brew tap rubyists/tap
+brew install fantasia
+fantasia version
+fantasia validate ./workflow.yaml
+fantasia doctor ./workflow.yaml
+----
+
++doctor+ may report missing or unauthenticated Claude/Codex CLIs, but the
+installed Fantasia executable itself must start and validate configuration
+without a source checkout.
+
+== Security and operational requirements
+
+* Preserve the warning that autonomous runners can execute arbitrary commands.
+* Make dangerous runner permission modes explicit in normalized config and
+  startup output.
+* Never log Linear keys or other secret environment values.
+* Bind the dashboard to loopback by default.
+* Bound GraphQL, comment, prompt, runner, hook, and log payload sizes.
+* Use HTTP connect/read timeouts and classified retries with jitter where
+  nondeterminism is outside workflow state.
+* Validate all workspace and prompt paths after resolving symlinks.
+* Do not pass the daemon's full environment to runners/hooks without a
+  documented allow/inherit policy.
+* Preserve workspaces on configurable classes of failure for diagnosis; remove
+  them only on terminal cleanup or an explicit operator command.
+* Emit telemetry for phase entry/exit, runner start/stop, gate waits, retries,
+  queue wait, Linear request, hook result, and recovery decisions.
+* Graceful shutdown stops admission, reconciles current ownership, cancels
+  runners, waits a bounded interval, and verifies process-tree termination.
+
+== Risks and mitigations
+
+[cols="2,4"]
+|===
+|Risk |Mitigation
+
+|Claude/Codex CLI protocols change
+|Versioned runner adapters, +doctor+ capability probes, fake executable
+fixtures, and no phase logic inside argument construction.
+
+|Dynamic YAML conflicts with deterministic replay
+|Normalize and hash snapshots; pin in-flight phase input; adopt changes only at
+validated phase boundaries; golden histories.
+
+|External activity repeats after a crash
+|Stable attempt/effect identities, idempotent Linear comments/mutations where
+possible, recovery inspection, and explicit at-least-once documentation.
+
+|Long-running CLI child is orphaned
+|Dedicated Port owner, OS process group, supervisor-aware cancellation, and
+grandchild integration tests.
+
+|Continuum/Oban/Ash overlap
+|Continuum owns workflow semantics; custom admission owns compatibility
+limits; defer Oban/Ash until separate ADRs justify them.
+
+|Drafter NIF complicates release targets
+|Make adoption conditional on Phase 0 native packaging; retain Owl parity UI.
+
+|Submodule sources are absent from GitHub-generated archives
+|Build release artifacts from recursive checkouts and ship compiled,
+notice-complete artifacts; formula never builds from an incomplete source zip.
+
+|Linear rate limits or transient failures
+|Paginated bounded client, response validation, backoff, last-known-good state,
+and no transition until mutations are confirmed.
+
+|Config or prompt compatibility is ambiguous
+|Fixture-based normative subset, explicit warnings, migration report, and
+documented intentional differences from Python.
+
+|Secrets leak through diagnostics or dashboard
+|Secret wrapper types, centralized redaction, hostile-value tests, and a final
+security review.
+|===
+
+== Decisions to close in Phase 0
+
+These are bounded implementation choices, not open-ended scope:
+
+. Choose and record the YAML parser.
+. Choose a prompt engine or approve a small Jinja-compatibility renderer after
+  corpus tests.
+. Confirm the generic Continuum interpreter and in-memory recovery design.
+. Pin supported Claude and Codex non-interactive command protocols.
+. Select the HTTP/web stack.
+. Select the artifact bundler and final target matrix.
+. Approve or defer Drafter based on native artifact tests.
+. Confirm the future Fantasia source repository URL used by update checks and
+  the formula homepage.
+. Decide whether the first release writes legacy +stokowski:+ markers only or
+  dual-writes a new versioned +fantasia:+ marker.
+
+Each decision should become a short ADR under +documents/decisions/+ before
+its dependent implementation merges.
+
+== Definition of done for the initial release
+
+Fantasia 0.1.0 is ready for publication when:
+
+* +apps/stokowski+ contains the Elixir implementation and no Python runtime is
+  required.
+* The eight-phase example and arbitrary valid phase graphs execute
+  deterministically.
+* Every agent phase has a validated prompt and independently selects Claude or
+  Codex.
+* Single-project and multi-project Stokowski workflow files pass the documented
+  migration/conformance suite.
+* Linear dispatch, gates, rework, recovery, workspaces, hooks, retries,
+  reconciliation, concurrency, sessions, metrics, TUI, and web/API parity are
+  complete.
+* The full automated suite passes without paid LLM access.
+* Opt-in sandbox runs pass once with Claude, once with Codex, and once with a
+  mixed workflow.
+* Security, license, migration, and operator documentation is complete.
+* Native release artifacts pass on every declared target.
+* +brew install rubyists/tap/fantasia+ installs a working +fantasia+ command.
+
+== Suggested first implementation slice
+
+After this plan is accepted, the first code slice should be deliberately
+small but vertical:
+
+. Parse and validate a minimal three-phase +agent -> gate -> terminal+
+  workflow.
+. Render that agent phase's own prompt from a fake issue.
+. Execute a fake Claude or Codex adapter as a Continuum activity.
+. Await an approval signal at the gate.
+. Emit and re-read a compatible structured tracking comment.
+. Complete the terminal transition.
+. Replay the golden history and package a +fantasia version+ smoke artifact.
+
+That slice proves the highest-risk boundaries before expanding to Linear,
+multi-project admission, real CLI processes, and the operator interfaces.
