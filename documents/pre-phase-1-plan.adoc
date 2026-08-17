@@ -1,0 +1,716 @@
+= Fantasia Pre-Phase 1: Bootstrap the Vendored Stokowski Workflow
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: highlight.js
+
+[NOTE]
+====
+Status: proposed implementation plan.
+
+This document plans the bootstrap work that precedes Phase 1 in
+link:initial-plan.adoc[the initial Elixir port plan]. It does not claim that
+the work is implemented. The intended next step is to turn the issue slices
+near the end of this document into tracked implementation issues.
+====
+
+== Outcome
+
+Pre-Phase 1 gives this repository a reliable way to run the vendored Python
+Stokowski while the Elixir port is being built:
+
+* +workflow.yaml+ describes Fantasia rather than +linear-cli+.
+* Every executable agent phase in that workflow selects +runner: codex+.
+* Codex is driven through its app-server protocol rather than an obsolete or
+  throwaway CLI invocation.
+* +mix stokowski+ launches +vendor/stokowski+ against the root workflow and
+  forwards operator arguments unchanged.
+* +mise+ pins the Elixir/Erlang, Python, +uv+, and Codex toolchain needed by
+  that path.
+* Repository setup, task discovery, configuration validation, and a safe
+  smoke test work from a fresh clone with initialized submodules.
+
+This is bootstrap plumbing, not the Elixir port itself. The Python process is
+a temporary implementation used to develop Fantasia with its own workflow.
+
+== Architectural decision: runners and models are separate extension points
+
+Fantasia must not equate an agent runtime with an inference provider.
+
+Codex app-server and Claude's agent interfaces own an agent loop, tools,
+sessions, approvals, and streaming events. Ollama and most OpenAI-compatible
+local servers primarily expose model inference. Treating those as one kind of
+adapter would either leak provider-specific behavior into the workflow engine
+or force model servers to imitate the Codex wire protocol.
+
+The long-term boundary is therefore two-layered:
+
+[source,text]
+----
+                  deterministic workflow engine
+                             |
+                      Runner contract
+          +------------------+------------------+
+          |                  |                  |
+  Codex app-server    Claude agent       Fantasia native
+      adapter            adapter            agent loop
+                                                 |
+                                          Model contract
+                               +-----------------+----------------+
+                               |                 |                |
+                            Ollama      OpenAI-compatible     native APIs
+
+  A future external-runner adapter speaks Fantasia's public JSON-RPC/stdio
+  protocol, allowing separately distributed integrations.
+----
+
+=== Runner contract
+
+A runner owns the execution of one agent turn. The workflow engine supplies
+a rendered prompt and policy; the runner returns normalized events and a
+terminal result. Provider-native session identifiers remain opaque to the
+workflow engine.
+
+The eventual +Stokowski.Runner+ behavior should cover these operations:
+
+* report adapter identity, version, and capabilities;
+* validate runner-specific configuration without starting work;
+* start a session or resume an opaque session reference;
+* start a turn and stream normalized events;
+* respond to approval or input requests according to workflow policy;
+* interrupt a turn and terminate its process tree;
+* close the transport while preserving resumable provider state where
+  supported.
+
+The normalized event vocabulary should be deliberately smaller than any one
+provider protocol:
+
+[cols="2,4"]
+|===
+|Event |Meaning
+
+|+session_started+
+|A provider session/thread exists; includes the opaque session reference.
+
+|+turn_started+
+|The provider accepted the prompt for execution.
+
+|+message_delta+
+|Incremental assistant-visible text used for activity and the dashboard.
+
+|+operation_started+, +operation_updated+, +operation_completed+
+|A tool, command, file edit, or other provider operation changed state.
+
+|+approval_requested+
+|The runner is blocked on a decision governed by configured policy.
+
+|+usage_updated+
+|Best available token or cost information; optional by capability.
+
+|+warning+
+|A non-terminal provider or protocol diagnostic.
+
+|+turn_completed+
+|Terminal success, failure, cancellation, timeout, or stall information.
+|===
+
+Native payloads may be retained as redacted diagnostic metadata, but state
+transitions must depend only on the normalized terminal result. Model text
+must never select a workflow transition.
+
+=== Capability negotiation
+
+Runners report capabilities such as +streaming+, +resume+, +steer+,
++interrupt+, +approvals+, +tool_events+, and +usage+. Workflow validation
+must reject a required unsupported capability or apply an explicitly
+documented fallback. It must not silently pretend, for example, that a fresh
+session is a resumed session.
+
+The session reference persisted by Fantasia should contain at least:
+
+* the configured runner name;
+* the runner adapter kind;
+* the opaque provider session/thread ID;
+* the adapter and provider protocol versions;
+* enough workspace/run identity to prevent resuming the wrong issue.
+
+=== Model contract
+
+The native Fantasia runner will eventually own the tool loop used with local
+or direct model providers. Its separate +Stokowski.Model+ behavior should
+cover model discovery, streaming generation, tool-call deltas, structured
+output, usage, context limits, and cancellation.
+
+Initial model adapters can include Ollama and a generic OpenAI-compatible HTTP
+endpoint. Individual models must advertise relevant capabilities because an
+Ollama installation does not imply that every installed model can call tools
+reliably. The native runner supplies filesystem, shell, Git, and other tools;
+the model adapter only supplies inference.
+
+=== Open extension path
+
+Elixir behaviors are the in-repository extension point. A later public
++Fantasia Runner Protocol+ should be JSON-RPC over newline-delimited stdio and
+mirror the normalized runner operations and events. An external executable
+plus a small manifest can then add a runner without recompiling Fantasia.
+
+That public protocol is not implemented in Pre-Phase 1. This plan reserves
+the boundary so the initial Codex and Claude adapters do not become hard-coded
+branches throughout the workflow engine.
+
+== Why Codex app-server is the Codex adapter
+
+The vendored Python implementation currently constructs
++codex --quiet --prompt ...+. The installed Codex CLI no longer accepts that
+shape, so changing only +workflow.yaml+ would fail before an agent turn began.
+
+The Codex app-server is a better long-term integration than wrapping human
+CLI output. Its stable surface provides:
+
+* newline-delimited JSON messages over stdio;
+* an initialization handshake;
+* +thread/start+, +thread/resume+, and +thread/fork+;
+* +turn/start+ and +turn/interrupt+;
+* structured item, message, operation, usage, and completion events;
+* explicit approval requests and responses;
+* a JSON Schema generated by the installed Codex version.
+
+See the
+https://github.com/openai/codex/blob/main/codex-rs/app-server/README.md[official
+Codex app-server protocol]. The app-server command and portions of its API are
+still evolving. Pre-Phase 1 therefore pins the Codex CLI, uses stdio only,
+does not opt into experimental fields, and tests against the schema generated
+by that pinned binary. WebSocket transport is explicitly out of scope.
+
+=== Bootstrap process lifecycle
+
+The temporary Python adapter should preserve Stokowski's process-per-turn
+shape while using provider sessions correctly:
+
+. Start +codex app-server --stdio+ in the issue workspace.
+. Send +initialize+ with Fantasia/Stokowski client metadata.
+. Send the +initialized+ notification.
+. Call +thread/start+ for a fresh phase or +thread/resume+ with the stored
+  thread ID when +session: inherit+ applies.
+. Call +turn/start+ with the phase prompt and configured execution policy.
+. Consume stdout continuously until +turn/completed+, while draining stderr
+  concurrently for diagnostics and activity.
+. Persist the thread ID as the run attempt's session reference.
+. On cancellation, timeout, or stall, send +turn/interrupt+ when possible and
+  then terminate the process group within a bounded grace period.
+. Close the app-server transport after the turn. A subsequent phase may
+  resume the persisted thread through a new app-server process.
+
+A focused smoke test must prove that a thread remains resumable after the
+client process exits. If the pinned Codex version does not preserve that
+contract, keep one supervised app-server connection per active run instead;
+do not silently discard session inheritance.
+
+=== Headless permissions
+
+The bootstrap must not use an unrestricted bypass flag. The initial Codex
+policy is:
+
+* approval policy +never+, because no human is attached to an active agent
+  turn;
+* workspace-write sandbox rooted at the isolated issue workspace;
+* network access enabled only where the workflow requires GitHub, Linear, or
+  dependency access;
+* no write roots outside the issue workspace unless explicitly configured.
+
+This policy must be configurable in the Codex adapter and visible in logs
+without logging credentials. If an operation is denied, the turn fails with
+an actionable policy error rather than retrying forever.
+
+== Current repository findings
+
+The implementation issues should start from these observed facts:
+
+* The new root +workflow.yaml+ is copied from +vendor/linear-cli+ and still
+  names that repository in comments, workspace paths, clone hooks, and model
+  rationale.
+* Only +code-review+ explicitly names a runner. Other agent states inherit the
+  current default of Claude.
+* Claude model IDs remain at both the root and phase levels. The Python merge
+  path can pass those IDs to Codex if they are not removed.
+* +session: inherit+ currently works for Claude, while the vendored Codex path
+  ignores session IDs. App-server makes that policy implementable for Codex.
+* The root prompt tells agents to follow +AGENTS.md+, but no root +AGENTS.md+
+  currently exists.
+* The checked-in prompt templates use nested +issue.*+ values, while the
+  Python renderer currently exposes flat +issue_*+ values. That would omit
+  critical issue context unless the compatibility gap is fixed.
+* +vendor/linear-cli/mise.toml+ pins Erlang 29.0.3, Elixir 1.20.3, and Python
+  3.14.1. Fantasia currently has no root +mise.toml+.
+* +uv+ is not currently on the ambient path. +mise+ can install both +uv+ and
+  Codex from its registry.
+* The Fantasia root project is an Elixir umbrella. It cannot copy
+  +linear-cli+'s standalone RepoTasks Mix project layout literally.
+* The repository snapshot has no configured root Git remote. The expected
+  clone URL is assumed to be +git@github.com:rubyists/fantasia.git+ and must be
+  confirmed before changing the hook.
+
+== Pre-Phase 1 scope
+
+=== In scope
+
+* Add the pinned root toolchain and a minimal +mix setup+ contract.
+* Add the repository instructions referenced by the agent prompt.
+* Add a tested Codex app-server adapter to the vendored Python Stokowski
+  source and advance the submodule reference intentionally.
+* Preserve the current Claude adapter while placing both adapters behind a
+  small internal runner boundary.
+* Preserve flat prompt variables and add the documented nested +issue+
+  context to the Python renderer.
+* Make the root workflow and comments Fantasia-specific.
+* Select Codex explicitly in every agent state and remove Claude model IDs
+  from Codex states.
+* Add and test +mix stokowski+ from the umbrella root.
+* Add deterministic configuration and fake-protocol tests plus an optional
+  credentialed smoke procedure.
+
+=== Out of scope
+
+* Porting the orchestrator, tracker, workspace manager, dashboard, or runner
+  supervision to Elixir.
+* Implementing +Stokowski.Model+, Ollama, the native Fantasia agent loop, or
+  the external runner protocol.
+* Replacing Linear or changing the configured Linear project slug.
+* Publishing the Fantasia release or Homebrew formula.
+* Copying +linear-cli+'s release, container, Git-hook, or generated usage-rule
+  plumbing.
+* Opting into experimental Codex app-server APIs.
+* Broadly refactoring the vendored Python application beyond the adapter and
+  prompt-context seams needed by this bootstrap.
+
+== Planned repository changes
+
+=== Root mise and Mix setup
+
+Add +mise.toml+ based on +vendor/linear-cli/mise.toml+:
+
+[source,toml]
+----
+[tools]
+erlang = "29.0.3"
+elixir = "1.20.3"
+python = "3.14.1"
+uv = "0.12.0"
+codex = "0.147.0"
+----
+
+The extra +uv+ and Codex pins are intentional. They are executable parts of
+the bootstrap, and the Codex pin also fixes the app-server schema being
+implemented. A future maintenance issue may update either pin after its
+contract tests pass.
+
+Add a minimal root +setup+ alias that fetches umbrella dependencies. It may
+grow later, but Pre-Phase 1 does not install Git hooks or perform network work
+unrelated to project setup.
+
+Document these canonical commands in a root +AGENTS.md+:
+
+[source,shell]
+----
+mise install
+mise exec -- mix setup
+mise exec -- mix test
+mise exec -- mix format --check-formatted
+mise exec -- mix stokowski --dry-run
+----
+
+The instructions must explain that +vendor/*+ entries are submodules and that
+changing a vendored implementation requires an intentional source commit and
+gitlink update, not an unexplained edit inside a detached checkout.
+
+=== Vendored Stokowski compatibility work
+
+The change belongs in the source repository that owns +vendor/stokowski+.
+Prefer an upstreamable commit and then advance the submodule. If that is not
+possible, use a documented Fantasia fork and record its remote and commit in
+the implementation issue. Do not leave an unreferenced dirty submodule.
+
+Introduce a focused app-server client module instead of growing the existing
++runner.py+ branch. It should:
+
+* encode request IDs and correlate responses;
+* perform the initialize/initialized handshake;
+* support thread start and resume;
+* start a turn and stream notifications;
+* translate relevant notifications into the existing event callback and
+  +RunAttempt+ fields;
+* answer or reject server requests according to the configured headless
+  policy;
+* distinguish protocol errors, provider turn failures, process failures,
+  stalls, timeouts, and cancellation;
+* drain stdout and stderr concurrently;
+* reject malformed or unknown terminal messages safely;
+* retain bounded raw diagnostics with secrets redacted.
+
+The existing +run_turn+ dispatcher remains the temporary provider-neutral
+boundary. Claude continues through its stream-JSON adapter. Codex delegates
+to the new app-server client and maps the Codex thread ID to
++RunAttempt.session_id+.
+
+The Python configuration should gain a small Codex-specific section for the
+command, approval policy, sandbox, network policy, and timeouts. Shared state
+options such as +model+, +session+, and turn/stall timeout should be resolved
+before calling either adapter. Do not keep routing Codex values through a
+type named +ClaudeConfig+ as the long-term contract.
+
+Prompt rendering should expose both forms during the compatibility period:
+
+* nested: +issue.identifier+, +issue.title+, +issue.description+,
+  +issue.state+, +issue.labels+, and +issue.url+;
+* legacy flat aliases: +issue_identifier+, +issue_title+, and the existing
+  related names.
+
+This lets the checked-in prompts render correctly without breaking older
+workflow files.
+
+=== Fantasia workflow
+
+Edit +workflow.yaml+ as a repository-owned operational file, not as a generic
+example:
+
+* replace +linear-cli+ names and workspace paths with Fantasia values;
+* clone the confirmed Fantasia repository recursively in +after_create+;
+* run hooks through +mise exec --+ so they use the pinned toolchain;
+* keep the existing Linear project slug unless the owner deliberately changes
+  it;
+* keep the same deterministic phase graph, gates, prompts, concurrency limits,
+  and rework edges;
+* set +runner: codex+ on +investigate+, +implement+, +code-review+, and
+  +merge+ explicitly;
+* remove every Claude model ID from Codex-selected phases and from any default
+  that can leak into them;
+* omit a model initially so Codex uses the authenticated user's configured
+  default; model pinning can be added later with a valid Codex model ID;
+* retain +session: fresh+ for adversarial code review and +session: inherit+
+  where cross-phase context is intended;
+* replace Claude/Opus/Sonnet commentary with provider-neutral explanations;
+* add the Codex app-server execution policy supported by the patched vendored
+  schema.
+
+Only +agent+ states have a runner. Gate and terminal states must not gain a
+synthetic +runner+ field merely to make a textual search say “all Codex.”
+
+=== Umbrella +mix stokowski+ task
+
+Place the task in the existing +:stokowski+ application, initially at
++apps/stokowski/lib/mix/tasks/stokowski.ex+. Invocation from the umbrella root
+must work after a clean compile; an acceptance test must prove task discovery.
+If Mix cannot discover an umbrella child task from a clean checkout, use a
+thin root tooling application rather than depending on build artifacts.
+
+The task contract mirrors the useful +vendor/linear-cli+ behavior:
+
+[source,shell]
+----
+mix stokowski [--dry-run] [--port PORT] [--host HOST] [-v]
+----
+
+The task must:
+
+* resolve the umbrella root and root +workflow.yaml+ deterministically;
+* fail clearly when the workflow or vendored submodule is absent;
+* fail with an actionable +mise install+ message when +uv+ or Codex is absent;
+* reject a bare literal +tracker.api_key+ while allowing omission or an
+  environment reference;
+* invoke the child process without a shell;
+* inherit the environment without reading, copying, or logging API keys;
+* stream stdout and stderr to the operator;
+* forward all task arguments after the workflow path without reinterpretation;
+* preserve the child exit status as a Mix failure;
+* run from the repository root regardless of the caller's shell directory, or
+  explicitly reject non-root invocation with a useful message.
+
+Use the vendored editable invocation because the upstream Python project lacks
+the build metadata needed by the simple path:
+
+[source,text]
+----
+uv run
+  --project <root>/vendor/stokowski
+  --extra web
+  --with-editable <root>/vendor/stokowski
+  --
+  stokowski
+  <root>/workflow.yaml
+  <forwarded arguments...>
+----
+
+A small +Stokowski.RepoCommand+ helper may own command lookup and live-output
+execution. Keep it narrowly scoped; it is bootstrap infrastructure, not the
+future runner implementation.
+
+== Test and verification plan
+
+=== Vendored Python tests
+
+Use a fake app-server executable and newline-delimited protocol fixtures. No
+unit test should require a Codex login, a Linear key, network access, or model
+tokens.
+
+Cover at least:
+
+* initialize handshake ordering;
+* thread start and capture of the returned thread ID;
+* thread resume when a session ID is supplied;
+* turn start with prompt, workspace, sandbox, and approval policy;
+* message and operation event normalization;
+* successful and failed +turn/completed+ payloads;
+* server-request handling under headless policy;
+* malformed JSON, unknown request IDs, early EOF, and nonzero process exit;
+* concurrent stderr draining;
+* stall timeout, turn timeout, interrupt, and process-group cleanup;
+* redaction of environment-sourced secrets;
+* nested and flat prompt variables producing the same issue values.
+
+Add a compatibility check that runs the pinned
++codex app-server generate-json-schema+ command and verifies that the stable
+methods and fields used by the adapter still exist. Store only focused request
+and event fixtures in the vendored tests; do not copy the entire generated
+schema into Fantasia unless needed for reproducibility.
+
+=== Elixir task tests
+
+Put task tests under +apps/stokowski/test/mix/tasks/+. Use a temporary project
+root and a fake +uv+ executable placed first on +PATH+.
+
+Cover at least:
+
+* missing +workflow.yaml+;
+* missing or uninitialized +vendor/stokowski+;
+* missing +uv+;
+* omitted API key and +$LINEAR_API_KEY+ reference accepted;
+* literal API key rejected without echoing it;
+* exact +uv+ argument order, absolute paths, working directory, and arbitrary
+  option forwarding;
+* live output behavior;
+* nonzero child exit translated to a Mix task failure;
+* +mix help stokowski+ and +mix stokowski+ discovery from a clean umbrella
+  build.
+
+=== Repository checks
+
+The normal non-credentialed verification sequence is:
+
+[source,shell]
+----
+mise install
+mise exec -- mix setup
+mise exec -- mix format --check-formatted
+mise exec -- mix test
+mise exec -- uv run --project vendor/stokowski --extra web \
+  --with-editable vendor/stokowski -- python -m pytest
+----
+
+Add a parser/configuration check that loads +workflow.yaml+, resolves every
+prompt, validates every transition, and confirms that all four agent phases
+select Codex without contacting Linear.
+
+=== Credentialed smoke test
+
+The final issue may run a controlled smoke test after unit and configuration
+tests pass:
+
+. Use a disposable Linear issue in the configured project.
+. Use an isolated workspace root.
+. Confirm that +mix stokowski --dry-run+ is side-effect-free before a live
+  invocation.
+. Allow one harmless agent phase to start through Codex app-server.
+. Observe normalized activity and a successful terminal turn.
+. Stop the process and confirm cleanup.
+. If session inheritance is enabled, resume the same Codex thread in the next
+  phase and verify the thread ID is unchanged.
+. Remove or close disposable external state explicitly.
+
+This procedure is manual by default because it consumes credentials and model
+capacity. CI must use the fake protocol server.
+
+== Issue-ready implementation slices
+
+The following order keeps each issue reviewable and makes dependencies clear.
+
+=== P0.1 — Pin Fantasia's bootstrap toolchain and setup contract
+
+Scope:
+
+* add root +mise.toml+ with the versions in this plan;
+* add minimal umbrella +mix setup+ behavior;
+* add root +AGENTS.md+ with canonical +mise+ commands and submodule guidance.
+
+Acceptance:
+
+* a fresh initialized clone can run +mise install+ and
+  +mise exec -- mix setup+;
+* +mise exec -- elixir --version+, +uv --version+, and +codex --version+ match
+  the pins;
+* existing umbrella tests and format checks pass.
+
+Dependencies: none.
+
+=== P0.2 — Add a tested Codex app-server client to vendored Stokowski
+
+Scope:
+
+* implement the stdio protocol lifecycle and stable message subset;
+* normalize Codex events;
+* implement headless approval, timeout, stall, interrupt, and cleanup behavior;
+* use a fake server and schema compatibility tests;
+* land the source change upstream or in an intentional fork and advance the
+  submodule reference.
+
+Acceptance:
+
+* all protocol tests pass without credentials;
+* the adapter uses no experimental fields and no unrestricted sandbox bypass;
+* stdout and stderr cannot deadlock the runner;
+* the pinned live app-server completes a harmless opt-in smoke turn.
+
+Dependencies: P0.1 for the pinned Codex executable.
+
+=== P0.3 — Integrate Codex sessions and compatible prompt context
+
+Scope:
+
+* route +runner: codex+ through the app-server client;
+* add and validate Codex-specific configuration;
+* map +session: inherit+ and +session: fresh+ to thread resume/start;
+* expose nested +issue+ prompt context while retaining flat aliases;
+* add dispatcher, configuration, prompt, and session tests.
+
+Acceptance:
+
+* fake Claude and fake Codex runners can execute through the same dispatcher;
+* Codex model settings never inherit a Claude model ID;
+* a resumed attempt uses the recorded thread ID, while a fresh attempt does
+  not;
+* all checked-in +.ai/prompts+ render populated issue data.
+
+Dependencies: P0.2.
+
+=== P0.4 — Make +workflow.yaml+ Fantasia-specific and Codex-only
+
+Scope:
+
+* correct repository comments, paths, and hooks;
+* confirm the clone URL;
+* select Codex explicitly on all four agent phases;
+* remove Claude model leakage while preserving the phase graph;
+* add a no-network workflow validation check.
+
+Acceptance:
+
+* parsed agent states are exactly +investigate+, +implement+,
+  +code-review+, and +merge+, and each resolves to Codex;
+* no resolved Codex state contains a +claude-*+ model;
+* all prompt paths and transitions validate;
+* the tracker slug is unchanged unless a separate owner decision says
+  otherwise;
+* hooks clone Fantasia and invoke Mix through +mise+.
+
+Dependencies: P0.1 and P0.3.
+
+=== P0.5 — Add the umbrella +mix stokowski+ launcher
+
+Scope:
+
+* add the Mix task and focused command helper;
+* add workflow, secret, dependency, forwarding, output, and failure tests;
+* document invocation and troubleshooting.
+
+Acceptance:
+
+* +mise exec -- mix help stokowski+ works from a clean umbrella build;
+* the fake +uv+ tests prove the exact vendored invocation and argument
+  forwarding;
+* no test or error output reveals an API key;
+* +mise exec -- mix stokowski --dry-run+ reaches the vendored CLI with the
+  root workflow.
+
+Dependencies: P0.1. It can be developed in parallel with P0.2 and P0.3, then
+verified against them.
+
+=== P0.6 — Prove the bootstrap path end to end
+
+Scope:
+
+* run the full non-credentialed verification sequence;
+* perform the controlled Codex/Linear smoke procedure;
+* record known operational limitations and recovery steps;
+* update this document's status with evidence rather than rewriting its
+  historical decisions.
+
+Acceptance:
+
+* one disposable issue reaches its configured first gate through
+  +mix stokowski+ and Codex app-server;
+* a fresh and an inherited session behave as configured;
+* cancellation leaves no child app-server process and no locked workspace;
+* the evidence identifies the exact Stokowski and Codex commits/versions.
+
+Dependencies: P0.2 through P0.5.
+
+== Definition of done
+
+Pre-Phase 1 is complete when all of the following are true:
+
+* Tool versions are pinned and reproducible through +mise+.
+* The workflow is repository-correct and explicitly Codex-only for agent
+  phases.
+* Codex communication uses the app-server stable stdio surface.
+* The temporary runner can start, resume, observe, interrupt, and clean up a
+  Codex turn without parsing human terminal output.
+* Prompts receive complete issue context.
+* +mix stokowski+ reliably invokes the vendored Python application from the
+  umbrella root and forwards operator flags.
+* Unit and configuration tests require no credentials.
+* A controlled live smoke test reaches the first human gate.
+* The vendored source change is represented by an intentional submodule
+  commit, not a dirty checkout.
+* Phase 1 can replace the Python bridge behind the same workflow-level runner
+  semantics without changing the deterministic phase graph.
+
+== Risks and decisions to confirm during issue creation
+
+[cols="2,4,3"]
+|===
+|Item |Planned handling |Decision point
+
+|Fantasia clone URL
+|Use +git@github.com:rubyists/fantasia.git+.
+|Confirm before P0.4 is implemented because this checkout has no root remote.
+
+|Stokowski source ownership
+|Prefer an upstream commit; otherwise use a documented fork.
+|Choose the writable source repository before P0.2 begins.
+
+|Codex version drift
+|Pin 0.147.0 and check its generated stable schema.
+|Upgrade only in a dedicated change with protocol tests.
+
+|Headless network access
+|Grant it only inside the issue workspace when required.
+|The smoke test must prove GitHub operations work without full-access mode.
+
+|App-server persistence
+|Start a process per turn and resume the stored thread.
+|If a thread cannot survive process exit, supervise one process per active
+run and document the lifecycle change.
+
+|Task location in an umbrella
+|Start in +apps/stokowski/lib/mix/tasks+.
+|Use a root tooling app only if clean-build discovery fails.
+
+|Tracker slug
+|Preserve +94a76f2ac65f+.
+|Change only through an explicit project-owner decision.
+
+|Open/local model support
+|Preserve separate Runner and Model contracts now; implement later.
+|Choose the first Ollama model and tool-loop acceptance suite in a post-parity
+plan, not this bootstrap.
+|===
+

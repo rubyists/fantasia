@@ -27,4 +27,8 @@
 	url = git@github.com:rubyists/homebrew-tap
 [submodule "vendor/stokowski"]
 	path = vendor/stokowski
-	url = git@github.com:Sugar-Coffee/stokowski
+	url = git@github.com:bougyman/stokowski
+	branch = feat/filter-assignee-me
+[submodule "vendor/linear-cli"]
+	path = vendor/linear-cli
+	url = git@github.com:rubyists/linear-cli

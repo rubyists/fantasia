@@ -6,6 +6,7 @@ defmodule Fantasia.MixProject do
       apps_path: "apps",
       version: "0.1.0",
       start_permanent: Mix.env() == :prod,
+      aliases: aliases(),
       deps: deps()
     ]
   end
@@ -17,5 +18,9 @@ defmodule Fantasia.MixProject do
   # Run "mix help deps" for examples and options.
   defp deps do
     []
+  end
+
+  defp aliases do
+    [setup: ["deps.get"]]
   end
 end

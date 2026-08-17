@@ -1,0 +1,69 @@
+= Fantasia Workflow Orchestrator
+:toc: right
+:toclevels: 3
+:sectanchors:
+:icons: font
+:tip-caption: 💡
+:note-caption: 📝
+:experimental:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:conventional-commits: https://www.conventionalcommits.org/en/v1.0.0/[Conventional Commits]
+
+Fantasia 🪄
+
+Fantasia is a concurrent workflow orchestrator for Elixir. Inspired by the Python stokowski library,
+Fantasia brings robust task orchestration to the BEAM, allowing you to define, manage, and execute
+complex dependency graphs with fault tolerance and speed.
+
+## Why Fantasia? (And why Elixir?)
+
+While Python is great, orchestrating I/O-bound tasks, concurrent workflows, and complex dependency
+trees is where the BEAM truly shines. Fantasia leaves the GIL behind to give you:
+
+True Concurrency:: Thousands of lightweight processes running side-by-side without breaking a sweat.
+Frictionless Pipelines:: Define your orchestration flow using standard Elixir pipe operators
+(|>) for clean, readable execution graphs.
+Robust State Handling:: Granular control over task success and failure states using deep pattern
+matching, ensuring that a single node failure doesn't bring down your entire orchestration pipeline
+unless you want it to.
+Supervision Trees:: Built-in fault tolerance. If a worker process crashes, Fantasia knows exactly
+how to restart it.
+
+## Durable Workflow Stages with Continuum
+
+Fantasia will use https://github.com/Yyeger/Continuum[Continuum] as the execution boundary around
+each deterministic workflow stage. One issue maps to one Continuum workflow run. Investigation,
+implementation, review, merge, Linear updates, Git operations, and LLM calls execute as activities,
+while the workflow graph alone decides which stage runs next. Model output remains data rather than
+control flow.
+
+Continuum journals workflow decisions and activity results so the same history can be replayed
+through the same orchestration code. With its PostgreSQL journal, a process or node may stop in the
+middle of a long-running issue and another process can reconstruct the run, recover the last durable
+boundary, and continue without guessing from terminal output. Human approvals, rework requests, and
+other external events arrive as durable signals, allowing a workflow to wait safely for hours or
+days.
+
+This gives Fantasia deterministic recovery, auditable stage histories, controlled activity retries,
+and replay tests that catch incompatible workflow changes. External effects still require stable
+idempotency keys and reconciliation because an API call cannot always be made exactly once.
+
+The initial compatibility release will use Continuum's in-memory journal while Linear tracking
+comments remain the cross-restart recovery authority. PostgreSQL-backed durability will be an
+opt-in mode after the no-database workflow reaches parity.
+
+## Installation
+
+## Usage
+
+## Contributing
+
+## Copying
+
+See COPYING
