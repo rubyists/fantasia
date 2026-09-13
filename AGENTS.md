@@ -20,6 +20,8 @@ without relying on ambient tool versions.
 Use `mise exec -- mix lc [LC_ARGS...]` for Linear operations. The task delegates to the checkout in
 `vendor/linear-cli`, preserving its arguments, standard streams, and exit status.
 
+Fantasia issues belong to the `EXT` team and the `Fantasia` project.
+
 ## Planning documents
 
 - `documents/pre-phase-1-plan.adoc` describes the vendored Python bootstrap.

@@ -29,6 +29,8 @@ Before starting any implementation work:
 
 ## Linear progress updates
 
+Fantasia issues belong to the `EXT` team and the `Fantasia` project.
+
 Post a new Linear comment for each milestone of your work — investigation
 findings, implementation decisions, results, guidance for the next
 stage, and so on. Do not try to maintain or find a single running
