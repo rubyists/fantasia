@@ -39,6 +39,7 @@ the implementer missed — not to rubber-stamp the PR.
    - Linting
    - Tests
 6. Post your review as a Linear comment titled `## Code Review`:
+   - Always only use `mix lc issue` to interact with Linear
    - List issues found (critical, major, minor)
    - Note anything that looks good
    - Give an overall assessment: approve, request changes, or flag concerns

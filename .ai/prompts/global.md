@@ -27,13 +27,24 @@ Before starting any implementation work:
 2. Run the project's test command to verify all tests pass.
 3. If either fails, investigate and fix before starting new work.
 
-## Linear workpad
+## Linear progress updates
 
-Use a single Linear comment as a persistent workpad:
+Post a new Linear comment for each milestone of your work — investigation
+findings, implementation decisions, results, guidance for the next
+stage, and so on. Do not try to maintain or find a single running
+comment to update:
 
-- Title: `## Workpad`
-- Update it at each milestone with: current status, decisions made, and next steps.
-- On rework runs, append the rework section — do not delete prior content.
+    mix lc issue comment <ISSUE_ID> --body-file <path>
+
+- Write the comment's full content to a file first, then pass its
+  path — never build a multi-line comment as an inline shell argument.
+- Each comment should stand on its own: describe only this step's
+  findings, decisions, and results, not the whole history. Read prior
+  comments for context (`mix lc issue ls --full <ISSUE_ID>`); post a new
+  one for what's new, don't try to edit an old one.
+- Always only use `mix lc` to interact with Linear — never call the
+  Linear API directly (curl, GraphQL, or otherwise). If `mix lc` is
+  broken, log that error and stop processing.
 
 ## Rework awareness
 
@@ -43,4 +54,5 @@ On rework runs, the workspace already contains prior work.  Check for:
 - An existing feature branch (do not create a new one)
 - An open PR (push to it, do not open a second)
 - Review comments requesting changes (address them specifically)
-- Prior workpad content (append to it, do not overwrite)
+- Prior progress comments (read them for context; post a new comment for
+  this run rather than editing an old one)

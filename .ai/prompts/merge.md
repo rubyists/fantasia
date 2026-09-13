@@ -26,8 +26,9 @@ mechanical stage — no new code changes.
    ```
    gh pr merge <number> --squash --delete-branch
    ```
-5. Update the Linear workpad with the merge confirmation.
-6. Move the Linear issue to `Done`.
+5. Always use `mix lc issue` to interact with Linear issues
+6. Post a Linear comment with the merge confirmation.
+7. Move the Linear issue to `Done`.
 
 ## Rework run
 
@@ -43,10 +44,11 @@ If this is a rework run (merge was attempted before but failed):
    - If it is a test failure caused by the PR's changes, post details to
      Linear and stop (this needs to go back to implementation).
    - If it is a flaky or infrastructure issue, re-run and retry the merge.
-4. Update the workpad with what happened.
+4. Post a Linear comment with what happened.
 
 ## Do NOT
 
 - Make code changes beyond conflict resolution.
 - Open new PRs.
 - Skip CI checks.
+- Use anything other than `mix lc` to interact with Linear
