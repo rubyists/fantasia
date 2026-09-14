@@ -18,6 +18,10 @@ defmodule Stokowski.CompatibilityTest do
              row["id"] == "lc-priority-metadata" and row["disposition"] == "defer"
            end)
 
+    assert Enum.any?(rows, fn row ->
+             row["id"] == "linear-assignee" and row["disposition"] == "preserve"
+           end)
+
     Enum.each(rows, fn row ->
       assert File.regular?(Path.join(root, row["adr"]))
     end)
@@ -78,4 +82,57 @@ defmodule Stokowski.CompatibilityTest do
     assert metadata["blocked_by"]["url"] ==
              "https://linear.app/the-rubyists/issue/EXT-64"
   end
+
+  test "post-baseline feature inventory covers every vendored Stokowski commit" do
+    root = Path.expand("../../../..", __DIR__)
+    vendor = Path.join(root, "vendor/stokowski")
+
+    assert {:ok, inventory} =
+             YamlElixir.read_from_file(
+               Path.join(
+                 root,
+                 "apps/stokowski/test/fixtures/compatibility/post-b80-features.yaml"
+               )
+             )
+
+    baseline = inventory["baseline"]
+    pin = inventory["pin"]
+
+    assert {_output, 0} =
+             System.cmd("git", ["-C", vendor, "merge-base", "--is-ancestor", baseline, pin])
+
+    assert {history, 0} =
+             System.cmd("git", ["-C", vendor, "rev-list", "--reverse", "#{baseline}..#{pin}"])
+
+    expected_commits = String.split(history)
+    commit_rows = inventory["commits"]
+    features = inventory["features"]
+    feature_ids = MapSet.new(features, & &1["id"])
+
+    assert Enum.map(commit_rows, & &1["sha"]) == expected_commits
+
+    referenced_features =
+      commit_rows
+      |> Enum.flat_map(fn row ->
+        assert non_empty_string?(row["summary"])
+        assert row["represents"] != []
+        assert Enum.all?(row["represents"], &MapSet.member?(feature_ids, &1))
+        row["represents"]
+      end)
+      |> MapSet.new()
+
+    assert referenced_features == feature_ids
+
+    Enum.each(features, fn feature ->
+      assert non_empty_string?(feature["id"])
+      assert feature["disposition"] in ~w(preserve correct defer)
+      assert non_empty_string?(feature["owner"])
+      assert non_empty_string?(feature["delivery_phase"])
+      assert non_empty_string?(feature["contract"])
+      assert feature["sources"] != []
+      assert Enum.all?(feature["sources"], &(&1 in expected_commits))
+    end)
+  end
+
+  defp non_empty_string?(value), do: is_binary(value) and String.trim(value) != ""
 end

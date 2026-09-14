@@ -7,7 +7,7 @@
 Stokowski `b80db05` superseded the workspace-write proposal in
 `documents/pre-phase-1-plan.adoc`. It invoked `codex exec` with JSONL, closed stdin,
 `danger-full-access`, `approval_policy="never"`, and ephemeral sessions so autonomous Git metadata
-updates worked. The currently pinned Stokowski `26c3cff` replaces that historical argv spelling
+updates worked. Stokowski `26c3cff` replaced that historical argv spelling
 with `--dangerously-bypass-approvals-and-sandbox`, removes `--ephemeral`, unifies the workflow key
 as `effort`, accepts `low`, `medium`, `high`, `xhigh`, and `max` for both initial runners, and
 persists native session identifiers.
@@ -43,7 +43,9 @@ production command supervisor remains Phase 1 work.
 Runner environments start from an allowlist (`HOME`, `PATH`, locale, temporary-directory and agent
 socket variables), add explicit project variables, and redact secret-shaped names from diagnostics.
 Copying the complete parent environment is corrected and must not be reintroduced, especially with
-unrestricted execution. Vendored Stokowski commit `342862a` introduced enforcement both while
-constructing the project environment and immediately before spawning the agent process; the
-current pin `26c3cff` retains it. Its subprocess test observes that `SSH_AUTH_SOCK` and declared
-project values cross the boundary while unrelated and secret-shaped ambient variables do not.
+unrestricted execution. Vendored Stokowski commit `342862a` first introduced enforcement both while
+constructing the project environment and immediately before spawning the agent process, but that
+side-branch commit was not included by the later upstream sync. Current pin `79fa1bb` restores the
+same boundary on top of all newer features and additionally retains declared artifact, issue, and
+state metadata. Its subprocess test observes that `SSH_AUTH_SOCK` and declared project values cross
+the boundary while unrelated and secret-shaped ambient variables do not.

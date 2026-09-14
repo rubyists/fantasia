@@ -1,0 +1,208 @@
+baseline: b80db05c6891e4f3d53e8b2cfa6d2222061261ed
+pin: 79fa1bb032fdb4517a28a2f6dcf074ff4571829e
+commits:
+  - sha: 4e5231d944ad2df1b293d492bc79dcf377782462
+    summary: Evidence, instrumentation, and a grounding stage
+    represents: [runner-event-fidelity, evidence-artifacts, structured-run-reports, classification-and-confidence, grounding-workflows, prompt-grounding-rules, hook-and-workspace-safety]
+  - sha: 6aaa2af697a10ab583c0357fe2fd51209998dda7
+    summary: Release v1.0.0 metadata
+    represents: [release-and-installation]
+  - sha: 2226057662b385b4b8d8892cc511a2feb4f1e29a
+    summary: Merge release v1.0.0
+    represents: [release-and-installation]
+  - sha: 5f27cfb24b60906fe0fd2261e6ca704bf99ae715
+    summary: Detect releases merged without squashing
+    represents: [release-and-installation]
+  - sha: 7c1f1b77c6527d841718db80e1a0e8b1900b0c87
+    summary: Run ledger, workflow studio, and script aliases
+    represents: [run-ledger-and-statistics, workflow-studio, operator-entrypoints, prompt-and-config-validation, dashboard-routes-and-controls, classification-and-confidence, prompt-grounding-rules]
+  - sha: afaee403a7ae768adc222a657994a748c9b978cd
+    summary: Release v1.1.0 metadata
+    represents: [release-and-installation]
+  - sha: 3432bad16cced38ca718f4683d876c58865bfce4
+    summary: Model picker and effective run controls
+    represents: [model-and-run-controls, workflow-studio, dashboard-routes-and-controls, release-and-installation]
+  - sha: cd2f1868a12cc30a8ffcbd8baa62fd0c1590353f
+    summary: Route labels to named workflows
+    represents: [named-workflow-routing, specialized-workflow-examples, run-ledger-and-statistics, workflow-studio]
+  - sha: 58cf1501526b2132687340d75349ca7a907e7f8b
+    summary: Route named workflows through the live orchestrator
+    represents: [named-workflow-routing]
+  - sha: 1cb5d0018ce3c52bf1ab3d6aaa74bfd83294cea8
+    summary: Remove ineffective budget control and keep custom models reachable
+    represents: [model-and-run-controls, workflow-studio]
+  - sha: c8e41946234c2eac490d4aafbb2499cd179d2797
+    summary: Render and edit the inline default workflow in the studio
+    represents: [workflow-studio, named-workflow-routing]
+  - sha: a49216c858dee239386d187f647a97a14cda3670
+    summary: Lead tracker reports with the recommendation
+    represents: [structured-run-reports]
+  - sha: cb07cc6c05b10ea4f6910eb4f8c5ec8125aa03f1
+    summary: Preserve comment authorship and mark machine reports
+    represents: [comment-attribution, structured-run-reports, prompt-grounding-rules]
+  - sha: 4b43d9e816ce65276e0792cdfbf8ba1bfb6e867a
+    summary: Add gate-summary reasons and deduplicate state announcements
+    represents: [structured-run-reports, state-announcement-idempotency]
+  - sha: e77d95feac8966d2686b3fefcf713df223f23010
+    summary: Recover gates from newest tracking state and stack global prompts
+    represents: [gate-recovery, global-prompt-stacks]
+  - sha: 339cbf4f3f6d9acdf808f9ba4c639d029cdd8e16
+    summary: Start each issue in its selected workflow entry state
+    represents: [named-workflow-routing]
+  - sha: 01fd7634de2ad2267b209e5208682ea5755bb6b5
+    summary: Integrate Sugar-Coffee upstream feature history
+    represents: [upstream-sync-provenance]
+  - sha: 8251174c9b989f465cad30ef857f09a87638c196
+    summary: Merge the upstream feature sync into the controlled fork
+    represents: [upstream-sync-provenance]
+  - sha: f1e2a9c86e963a79a91faf67c1517d26403ed051
+    summary: Unify runner effort configuration
+    represents: [model-and-run-controls]
+  - sha: b28b3ea3c2ce240793f3f002ba73878a6a99ed51
+    summary: Refresh the current runner model catalogue
+    represents: [model-and-run-controls]
+  - sha: 26c3cff8ec5804768ce5259fe00636f74d36c152
+    summary: Persist native sessions and portable cross-runner handoffs
+    represents: [runner-session-continuity]
+  - sha: 79fa1bb032fdb4517a28a2f6dcf074ff4571829e
+    summary: Restore containment at the runner subprocess boundary
+    represents: [runner-environment-containment]
+features:
+  - id: runner-event-fidelity
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462]
+    disposition: preserve
+    owner: Stokowski.Runner adapters, Stokowski.EventSink, and Stokowski.Projection
+    delivery_phase: Phase 2 and Phase 4
+    contract: Normalize real provider events for messages, operations, failures, rate limits, usage, cache tokens, cost, and bounded activity; accumulate per-run usage without inventing unavailable data.
+  - id: evidence-artifacts
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462]
+    disposition: preserve
+    owner: Stokowski.Workspace, Stokowski.Tracker, and the effect journal
+    delivery_phase: Phase 2 and Phase 4
+    contract: Collect bounded supported evidence inside the issue workspace, exclude it through private Git metadata, attach it through a capable CLI tracker adapter, and remove local copies only after a reconciled effect.
+  - id: structured-run-reports
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462, a49216c858dee239386d187f647a97a14cda3670, cb07cc6c05b10ea4f6910eb4f8c5ec8125aa03f1, 4b43d9e816ce65276e0792cdfbf8ba1bfb6e867a]
+    disposition: preserve
+    owner: normalized runner result, report projection, and tracker adapter
+    delivery_phase: Phase 1, Phase 2, and Phase 4
+    contract: Require a bounded structured report, render recommendation and verdict first, include key points and next steps, expose evidence coverage, and visibly mark missing or unsourced claims.
+  - id: classification-and-confidence
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462, 7c1f1b77c6527d841718db80e1a0e8b1900b0c87]
+    disposition: preserve
+    owner: normalized report, tracker labels capability, and statistics projection
+    delivery_phase: Phase 2 and Phase 4
+    contract: Preserve the first independent work classification and confidence, optionally project them as tracker labels, and use them as explicit statistics dimensions.
+  - id: grounding-workflows
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462]
+    disposition: correct
+    owner: normalized workflow definitions and runner session policy
+    delivery_phase: Phase 1
+    contract: Ship grounding as a data-defined fresh-session phase before the first research gate in applicable example workflows, never as a hard-coded core phase.
+  - id: specialized-workflow-examples
+    sources: [cd2f1868a12cc30a8ffcbd8baa62fd0c1590353f]
+    disposition: preserve
+    owner: example workflow assets
+    delivery_phase: Phase 1 and Phase 5
+    contract: Provide feature, bug-fix, and exploration examples; reproduction is explicit for bugs and exploration has no implicit implementation path.
+  - id: prompt-grounding-rules
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462, 7c1f1b77c6527d841718db80e1a0e8b1900b0c87, cb07cc6c05b10ea4f6910eb4f8c5ec8125aa03f1]
+    disposition: preserve
+    owner: prompt assets and deterministic prompt assembly
+    delivery_phase: Phase 1 and Phase 5
+    contract: Retain measurement, source, preview URL, paired evidence, open-PR collision, unattended-tooling, and reader-attribution instructions in the executable prompt corpus.
+  - id: hook-and-workspace-safety
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462]
+    disposition: correct
+    owner: Stokowski.Workspace and Stokowski.Command
+    delivery_phase: Phase 2
+    contract: Hooks must tolerate intentional dirty workspaces, preserve review history, permit cold setup within explicit deadlines, and leave package-manager choice to the repository configuration.
+  - id: run-ledger-and-statistics
+    sources: [7c1f1b77c6527d841718db80e1a0e8b1900b0c87, cd2f1868a12cc30a8ffcbd8baa62fd0c1590353f]
+    disposition: correct
+    owner: Continuum journal plus durable projections
+    delivery_phase: Phase 3 and Phase 4
+    contract: Record every phase, gate verdict, terminal outcome, workflow, classification, and confidence once; derive approval statistics with visible sample sizes from journaled events instead of a separate scheduling authority.
+  - id: workflow-studio
+    sources: [7c1f1b77c6527d841718db80e1a0e8b1900b0c87, 3432bad16cced38ca718f4683d876c58865bfce4, cd2f1868a12cc30a8ffcbd8baa62fd0c1590353f, 1cb5d0018ce3c52bf1ab3d6aaa74bfd83294cea8, c8e41946234c2eac490d4aafbb2499cd179d2797]
+    disposition: preserve
+    owner: operator web surface over validated configuration
+    delivery_phase: Phase 4
+    contract: Show inline and named workflows with routing, preserve comments on whitelisted edits, validate in real path context, replace atomically, keep secrets and structural rewiring out, and retain a custom model escape hatch.
+  - id: operator-entrypoints
+    sources: [7c1f1b77c6527d841718db80e1a0e8b1900b0c87]
+    disposition: correct
+    owner: Fantasia CLI, repository Mix tasks, and packaged launcher
+    delivery_phase: Phase 4 and Phase 6
+    contract: Provide discoverable run, studio, validate, statistics, and test entrypoints without retaining Stokowski-specific pnpm or virtualenv launch mechanics.
+  - id: prompt-and-config-validation
+    sources: [7c1f1b77c6527d841718db80e1a0e8b1900b0c87, cd2f1868a12cc30a8ffcbd8baa62fd0c1590353f]
+    disposition: preserve
+    owner: workflow loader and generic registry validation
+    delivery_phase: Phase 1
+    contract: Validate every inline and named workflow plus every referenced prompt before activation or dry-run success; construction must not depend on configuration that has not loaded.
+  - id: dashboard-routes-and-controls
+    sources: [7c1f1b77c6527d841718db80e1a0e8b1900b0c87, 3432bad16cced38ca718f4683d876c58865bfce4]
+    disposition: preserve
+    owner: shared projection and web operator surface
+    delivery_phase: Phase 4
+    contract: Keep literal API routes unshadowed by issue lookup, expose working project and run controls, and render model, effort, usage, cost, rate-limit, and activity data from normalized projections.
+  - id: model-and-run-controls
+    sources: [3432bad16cced38ca718f4683d876c58865bfce4, 1cb5d0018ce3c52bf1ab3d6aaa74bfd83294cea8, f1e2a9c86e963a79a91faf67c1517d26403ed051, b28b3ea3c2ce240793f3f002ba73878a6a99ed51]
+    disposition: correct
+    owner: normalized runner request, adapter validation, and workflow studio
+    delivery_phase: Phase 1, Phase 2, and Phase 4
+    contract: Use shared effort, model, turn deadline, and stall deadline controls that affect real invocations; keep catalogues advisory and custom values reachable; reject removed inert max-turn and subscription budget claims.
+  - id: named-workflow-routing
+    sources: [cd2f1868a12cc30a8ffcbd8baa62fd0c1590353f, 58cf1501526b2132687340d75349ca7a907e7f8b, c8e41946234c2eac490d4aafbb2499cd179d2797, 339cbf4f3f6d9acdf808f9ba4c639d029cdd8e16]
+    disposition: correct
+    owner: tracker-neutral routing and immutable workflow snapshots
+    delivery_phase: Phase 1 and Phase 3
+    contract: Route normalized labels through ordered first-match rules, retain an inline default, validate all workflows, start at the selected workflow entry, and pin the choice for replay despite later relabeling.
+  - id: global-prompt-stacks
+    sources: [cd2f1868a12cc30a8ffcbd8baa62fd0c1590353f, e77d95feac8966d2686b3fefcf713df223f23010]
+    disposition: preserve
+    owner: deterministic prompt assembly
+    delivery_phase: Phase 1
+    contract: Accept one global prompt or an ordered list, compose shared and workflow-specific framing explicitly, and capture the resolved content in the workflow snapshot.
+  - id: comment-attribution
+    sources: [cb07cc6c05b10ea4f6910eb4f8c5ec8125aa03f1]
+    disposition: preserve
+    owner: normalized tracker comments and prompt assembly
+    delivery_phase: Phase 1 and Phase 2
+    contract: Carry stable author identity into prompt context and mark Fantasia-authored reports so model output is never mistaken for human direction.
+  - id: state-announcement-idempotency
+    sources: [4b43d9e816ce65276e0792cdfbf8ba1bfb6e867a]
+    disposition: correct
+    owner: Continuum effect identity and tracker reconciliation
+    delivery_phase: Phase 3
+    contract: Announce a phase at most once per issue, workflow, phase, and run while treating each rework run as a distinct transition.
+  - id: gate-recovery
+    sources: [e77d95feac8966d2686b3fefcf713df223f23010]
+    disposition: correct
+    owner: Continuum history with tracker signals and legacy-marker import
+    delivery_phase: Phase 1 and Phase 3
+    contract: Reconstruct the newest valid gate boundary deterministically, replay approval or rework through Continuum, never depend on an in-memory pending-gate cache, and surface irreconcilable tracker state.
+  - id: release-and-installation
+    sources: [6aaa2af697a10ab583c0357fe2fd51209998dda7, 2226057662b385b4b8d8892cc511a2feb4f1e29a, 5f27cfb24b60906fe0fd2261e6ca704bf99ae715, afaee403a7ae768adc222a657994a748c9b978cd, 3432bad16cced38ca718f4683d876c58865bfce4]
+    disposition: correct
+    owner: Fantasia release pipeline and Homebrew tap
+    delivery_phase: Phase 6
+    contract: Replace Python release mechanics with the single Fantasia version, native target artifacts, verified tags for squash or merge histories, checksums, notices, and tested Homebrew publication.
+  - id: runner-session-continuity
+    sources: [4e5231d944ad2df1b293d492bc79dcf377782462, 26c3cff8ec5804768ce5259fe00636f74d36c152]
+    disposition: correct
+    owner: Stokowski.Runner registry, session manager, and Continuum history
+    delivery_phase: Phase 2 and Phase 3
+    contract: Persist early namespaced native references for same-runner resume and bounded public outcomes for cross-runner handoff without storing private reasoning or crossing provider identities.
+  - id: runner-environment-containment
+    sources: [79fa1bb032fdb4517a28a2f6dcf074ff4571829e]
+    disposition: correct
+    owner: Stokowski.Command
+    delivery_phase: Phase 2
+    contract: Build an allowlisted environment and enforce it again at the final Claude or Codex spawn boundary while retaining declared tracker, run metadata, and SSH agent values.
+  - id: upstream-sync-provenance
+    sources: [01fd7634de2ad2267b209e5208682ea5755bb6b5, 8251174c9b989f465cad30ef857f09a87638c196]
+    disposition: preserve
+    owner: Phase 0 compatibility inventory
+    delivery_phase: Phase 0
+    contract: Prove that every commit introduced by the upstream-sync merge is represented by this inventory rather than treating the merge commit itself as feature evidence.

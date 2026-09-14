@@ -2,6 +2,13 @@
 :status: accepted
 :date: 2026-09-14
 
+== Amendment history
+
+Sep 14, 2026:: ADR 0006 assigns the post-`b80db05` run-ledger, workflow-pin,
+state-announcement, and gate-recovery outcomes to Continuum histories and projections. Normalized
+tracker comments remain durable external signals and legacy reconstruction inputs; they are not a
+second phase machine.
+
 == Decision
 
 Fantasia uses the vendored Continuum commit `237dfbb` (0.8.1), not the historical 0.7.1 plan. A run
@@ -17,3 +24,8 @@ The in-memory journal is supported only for process-local execution and determin
 tracking markers remain cross-process recovery authority in the initial compatibility release.
 PostgreSQL is required before Fantasia claims durable cross-process Continuum recovery; selecting a
 current YAML file during recovery is never allowed.
+
+Gate recovery nevertheless runs through Continuum. The tracker adapter selects the newest valid
+normalized gate signal, including imported legacy markers; Fantasia reconstructs the persisted
+boundary and asks the Continuum interpreter to replay approval or rework. It does not port
+Stokowski's in-memory pending-gate cache or make comment ordering itself the transition engine.

@@ -1,0 +1,108 @@
+= ADR 0006: Post-b80 Stokowski feature disposition
+:status: accepted
+:date: 2026-09-14
+
+== Context
+
+The original Phase 0 ledger used Stokowski `b80db05` as its historical baseline. The controlled
+fork subsequently integrated Stokowski 1.0 and 1.1 plus local runner work, reaching `79fa1bb` after
+22 commits in the full Git ancestry range. That range is not a small runner refresh: it adds
+evidence artifacts, structured reports, a run ledger and statistics, named workflow routing,
+specialized workflows, the workflow studio, prompt grounding, improved gate summaries and
+recovery, current run controls, model catalogues, native session continuity, and restored process
+environment containment.
+
+Simply advancing the submodule pin does not make those behaviors part of Fantasia's plan. Some map
+onto existing Fantasia boundaries and some deliberately require a different implementation. Every
+operator-visible feature and correctness result therefore needs an explicit disposition before the
+Elixir port can claim compatibility.
+
+The machine-readable inventory at
+`apps/stokowski/test/fixtures/compatibility/post-b80-features.yaml` is the exhaustive commit and
+feature index for `b80db05..79fa1bb`. Tests compare its commit list with the vendored Git history,
+require every commit to reference a declared feature, and require every feature to name its sources,
+disposition, owner, delivery phase, and contract.
+
+The range is additive to the earlier ledger, not a replacement for it. In particular, the
+project-scoped `tracker.assignee: me` behavior already present at `b80db05` remains a dedicated
+preserved compatibility row and is still exercised by the current Stokowski suite.
+
+== Decision
+
+No post-baseline feature may disappear merely because Fantasia uses a different architecture.
+
+`preserve` means retain the observable operator contract. `correct` means retain the goal and
+acceptance behavior while replacing a Stokowski-specific or faulty mechanism with Fantasia's
+normalized architecture. `defer` would require an explicit later delivery boundary and must not be
+used as a silent scope cut. The current inventory preserves or corrects every listed feature; none
+is silently deferred.
+
+=== Continuum owns histories and recovery
+
+The Python run ledger, state-announcement deduplication, workflow pin, and gate-recovery fixes are
+not separate scheduling authorities in Fantasia. Continuum histories record normalized phase
+entries, runner results, gate signals, effect identities, rework runs, and terminal outcomes.
+Statistics and operator projections consume those events.
+
+The tracker remains the durable external signal source for human approval, rework, and legacy
+migration boundaries. On recovery, the tracker adapter normalizes and orders those signals; the
+Continuum interpreter reconstructs or replays the workflow snapshot and decides the resulting
+state. A pending gate held only in process memory is never authoritative. Until a durable Continuum
+journal is configured, legacy tracking comments remain the cross-process reconstruction input, not
+the phase machine itself.
+
+=== Tracker-neutral routing, reports, and evidence
+
+Label-based workflow routing is preserved over normalized tracker labels, not Linear types. Rules
+are ordered and first-match-wins. The selected workflow, its entry phase, resolved prompt stack, and
+configuration fingerprint enter the immutable workflow snapshot before dispatch. Relabeling cannot
+move an active issue to another workflow.
+
+Structured reports, author attribution, classification, confidence, recommendations, evidence
+coverage, key points, and next steps are provider-neutral domain values. Tracker adapters render
+and reconcile them. Fantasia-authored output carries an explicit machine-author marker.
+
+Evidence upload adds an optional `attachments` tracker capability and a normalized
+`attach_artifact` effect to the tracker decision. A required artifact fails clearly when an adapter
+lacks the capability. The workspace manager owns bounded collection and private Git exclusion; the
+effect journal owns upload identity and reconciliation. An adapter may use a documented domain
+command or permitted CLI API subcommand, but raw provider shapes remain private.
+
+=== Product surfaces remain features
+
+The run ledger and statistics are projections over Continuum history rather than a second JSONL
+authority. The workflow studio remains an initial-release operator surface: it shows inline and
+named workflows plus routing, preserves comments, validates edits in their real path context,
+allows only a safe field whitelist, excludes credentials and structural rewiring, and replaces
+validated files atomically. Dashboard literal routes must not be shadowed by issue-lookup routes;
+run controls and event, effort, model, usage, cost, rate-limit, and activity views consume the same
+normalized projections as the terminal interface.
+
+Stokowski's `pnpm` and virtualenv aliases are not copied. Fantasia supplies equivalent discoverable
+CLI, Mix-task, packaged-launcher, studio, validation, and statistics entrypoints. Likewise, Python
+release detection is replaced by Fantasia's versioned native artifact and Homebrew pipeline, but
+the acceptance result—real tags and artifacts for both squash and merge histories—is retained.
+
+=== Prompts, workflows, and runner policy
+
+The full post-baseline prompt corpus is compatibility input. Phase 1 must exercise ordered global
+prompt stacks, specialized feature/bug-fix/exploration workflows, fresh-session grounding,
+measurement and evidence rules, deployment previews, collision checks, unattended tooling, and
+reader attribution. Grounding and reproduction are data-defined phases, never hard-coded core
+states.
+
+Runner effort, model, native session, portable handoff, event, usage, and environment behavior
+remain governed by the pluggable runner decision. Catalogues are advisory; configured custom model
+values remain possible. Only controls that affect the real invocation are exposed. Provider usage
+is accumulated truthfully, including cache and cost fields when available, and unavailable values
+remain unavailable rather than zero.
+
+== Consequences
+
+Phase 0 now fails if a commit enters the pinned post-baseline range without an inventory mapping.
+Later phases can implement features through Fantasia-native boundaries without losing their
+acceptance behavior. The inventory is planning evidence, not a claim that the Elixir port already
+implements the feature.
+
+Every feature must acquire executable evidence in its stated delivery phase. Phase 5 cannot close
+while an inventory item lacks its implementation, migration rule, or an explicit superseding ADR.

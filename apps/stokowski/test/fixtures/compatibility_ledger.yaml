@@ -55,12 +55,19 @@
   disposition: correct
   adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
 - id: runner-environment
-  source: vendor/stokowski@342862a
+  source: vendor/stokowski@79fa1bb
   fixture: apps/stokowski/test/fixtures/runners/environment.yaml
   input: inherited process environment and project variables
   output: allowlist plus explicit project values; ambient secrets excluded
   disposition: correct
   adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
+- id: post-b80-feature-disposition
+  source: vendor/stokowski@79fa1bb
+  fixture: apps/stokowski/test/fixtures/compatibility/post-b80-features.yaml
+  input: complete Git ancestry from the historical b80db05 baseline through the current pin
+  output: every commit maps to an owned preserve, correct, or defer feature contract
+  disposition: correct
+  adr: documents/decisions/0006-post-b80-stokowski-feature-disposition.adoc
 - id: process-tree-cleanup
   source: vendor/stokowski@b80db05
   fixture: apps/stokowski/test/fixtures/runners/process-lifecycle.yaml
