@@ -1,14 +1,16 @@
 ---
-name: linear-cli
+name: linear
 description: Create, update, organize, and comment on Linear CLI repository issues with mix lc, body files, assignment/status setup, and dependency links. Use for Linear work in this repository, not unrelated Linear projects.
 ---
 
 # Linear CLI issues
 
-Use this skill for Linear issue work in the `linear-cli` repository.
+Use this skill for Linear issue work in the `fantasia` repository.
 
-Use `mix lc` rather than raw `lc`, so the working tree's CLI is exercised.
-If `mix lc` fails, report the failure; do not fall back to raw `lc`.
+Use `mise exec -- mix lc` rather than raw `lc`, so the working tree's CLI is exercised.
+If `mise exec -- mix lc` fails, report the failure; do not fall back to raw `lc`.
+
+The rest of this document will leave out the `mise exec --` prefix for brevity.
 
 ## Required client and body handling
 
