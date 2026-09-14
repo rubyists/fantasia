@@ -16,7 +16,11 @@ defmodule Mix.Tasks.Stokowski do
 
   @impl Mix.Task
   def run(args) do
-    root = umbrella_root()
+    run(args, umbrella_root())
+  end
+
+  @doc false
+  def run(args, root) do
     workflow = Path.join(root, "workflow.yaml")
     vendor = Path.join([root, "vendor", "stokowski"])
 
