@@ -7,7 +7,7 @@ tracker:
   assignee: me
 state:
   <<: *defaults
-  reasoning_effort: high
+  effort: high
 states:
   investigate:
     runner: codex

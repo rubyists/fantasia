@@ -1,35 +1,36 @@
 defmodule Stokowski.Runner.Codex do
-  @moduledoc "Pure Codex argv and JSONL normalization contract."
+  @moduledoc """
+  Phase 0 characterization of Codex argv and JSONL normalization.
 
-  @reasoning ~w(minimal low medium high xhigh)
+  This module records provider-protocol evidence; it is not the production
+  runner adapter or registry required by the pluggable-runner decision.
+  """
+
+  @efforts ~w(low medium high xhigh max)
 
   @spec argv(Path.t(), String.t(), keyword()) :: {:ok, [String.t()]} | {:error, term()}
   def argv(workspace, prompt, opts \\ []) do
-    reasoning = opts[:reasoning_effort]
+    effort = opts[:effort]
+    session_id = opts[:session_id]
 
-    if is_nil(reasoning) or reasoning in @reasoning do
-      args = [
-        "exec",
-        "--sandbox",
-        "danger-full-access",
-        "--ephemeral",
-        "--json",
-        "--cd",
-        workspace,
-        "--config",
-        ~s(approval_policy="never")
-      ]
+    if is_nil(effort) or effort in @efforts do
+      args = if session_id, do: ["exec", "resume"], else: ["exec"]
+
+      args = args ++ ["--dangerously-bypass-approvals-and-sandbox", "--json"]
+      args = if session_id, do: args, else: args ++ ["--cd", workspace]
 
       args = if opts[:model], do: args ++ ["--model", opts[:model]], else: args
 
       args =
-        if reasoning,
-          do: args ++ ["--config", ~s(model_reasoning_effort="#{reasoning}")],
+        if effort,
+          do: args ++ ["--config", ~s(model_reasoning_effort="#{effort}")],
           else: args
+
+      args = if session_id, do: args ++ [session_id], else: args
 
       {:ok, args ++ [prompt]}
     else
-      {:error, {:unsupported_reasoning_effort, reasoning}}
+      {:error, {:unsupported_effort, effort}}
     end
   end
 

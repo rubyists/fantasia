@@ -1,16 +1,26 @@
-argv:
+fresh_argv:
   - codex
   - exec
-  - --sandbox
-  - danger-full-access
-  - --ephemeral
+  - --dangerously-bypass-approvals-and-sandbox
   - --json
   - --cd
   - WORKSPACE
   - --config
-  - 'approval_policy="never"'
+  - 'model_reasoning_effort="max"'
+  - PROMPT
+resume_argv:
+  - codex
+  - exec
+  - resume
+  - --dangerously-bypass-approvals-and-sandbox
+  - --json
   - --config
-  - 'model_reasoning_effort="high"'
+  - 'model_reasoning_effort="max"'
+  - SESSION_ID
+  - PROMPT
 stdin: closed
-session: fresh
-valid_reasoning: [minimal, low, medium, high, xhigh]
+session:
+  fresh_without_reference: true
+  native_resume_with_reference: true
+workflow_key: effort
+valid_effort: [low, medium, high, xhigh, max]

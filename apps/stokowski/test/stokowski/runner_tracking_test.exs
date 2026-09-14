@@ -6,29 +6,47 @@ defmodule Stokowski.RunnerTrackingTest do
 
   @fixtures Path.expand("../fixtures", __DIR__)
 
-  test "Codex argv makes permissions and ephemeral transport explicit" do
+  test "Codex fresh argv uses unified effort and unrestricted execution explicitly" do
     assert {:ok, args} =
-             Codex.argv("/tmp/work", "review", model: "test-model", reasoning_effort: "high")
+             Codex.argv("/tmp/work", "review", model: "test-model", effort: "max")
 
     assert args == [
              "exec",
-             "--sandbox",
-             "danger-full-access",
-             "--ephemeral",
+             "--dangerously-bypass-approvals-and-sandbox",
              "--json",
              "--cd",
              "/tmp/work",
-             "--config",
-             ~s(approval_policy="never"),
              "--model",
              "test-model",
              "--config",
-             ~s(model_reasoning_effort="high"),
+             ~s(model_reasoning_effort="max"),
              "review"
            ]
 
-    assert {:error, {:unsupported_reasoning_effort, "extreme"}} =
-             Codex.argv("/tmp/work", "review", reasoning_effort: "extreme")
+    assert {:error, {:unsupported_effort, "extreme"}} =
+             Codex.argv("/tmp/work", "review", effort: "extreme")
+  end
+
+  test "Codex resume argv carries the opaque native session reference" do
+    assert {:ok, args} =
+             Codex.argv("/tmp/work", "implement",
+               model: "gpt-5.6-luna",
+               effort: "max",
+               session_id: "thread-fixture"
+             )
+
+    assert args == [
+             "exec",
+             "resume",
+             "--dangerously-bypass-approvals-and-sandbox",
+             "--json",
+             "--model",
+             "gpt-5.6-luna",
+             "--config",
+             ~s(model_reasoning_effort="max"),
+             "thread-fixture",
+             "implement"
+           ]
   end
 
   test "Codex JSONL is normalized without treating arbitrary lines as final messages" do

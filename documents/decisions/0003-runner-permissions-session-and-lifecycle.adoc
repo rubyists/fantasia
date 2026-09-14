@@ -4,18 +4,34 @@
 
 == Context
 
-Stokowski `b80db05` supersedes the workspace-write proposal in
-`documents/pre-phase-1-plan.adoc`. It invokes `codex exec` with JSONL, closed stdin,
+Stokowski `b80db05` superseded the workspace-write proposal in
+`documents/pre-phase-1-plan.adoc`. It invoked `codex exec` with JSONL, closed stdin,
 `danger-full-access`, `approval_policy="never"`, and ephemeral sessions so autonomous Git metadata
-updates work.
+updates worked. The currently pinned Stokowski `26c3cff` replaces that historical argv spelling
+with `--dangerously-bypass-approvals-and-sandbox`, removes `--ephemeral`, unifies the workflow key
+as `effort`, accepts `low`, `medium`, `high`, `xhigh`, and `max` for both initial runners, and
+persists native session identifiers.
+
+The accepted link:../pluggable-runner-interface-decision.adoc[pluggable runner decision]
+supersedes any implication here that Codex and Claude are hard-coded production dispatch paths.
+The Phase 0 `Stokowski.Runner.Codex` module characterizes the Codex provider protocol only; a
+production adapter must enter through the shared behavior, registry, command owner, and conformance
+suite defined by that decision.
 
 == Decision
 
-Fantasia preserves that argv as compatibility evidence but treats unrestricted execution as an
-explicit deployment capability, never OS isolation. It may run only against a trusted repository
-inside a container or equivalent external boundary. The checked-in workflow declares every Codex
-phase `session: fresh`; a fresh run must never be labelled resumed. Resume remains deferred until a
-runner persists a thread identifier and proves `codex exec resume` compatibility.
+Fantasia treats unrestricted execution as an explicit deployment capability, never OS isolation.
+It may run only against a trusted repository inside a container or equivalent external boundary.
+The current compatibility fixture preserves the fresh and resume argv forms from Stokowski
+`26c3cff`. A first turn without a native reference starts `codex exec`; a continuation with a
+persisted Codex thread reference runs `codex exec resume`. The checked-in workflow requests
+`session: inherit` for investigation, implementation, and merge, and `session: fresh` for
+adversarial code review. Cross-runner continuation uses the bounded portable handoff required by
+the pluggable runner decision, never another provider's opaque native reference.
+
+The workflow-facing option is only `effort`. The Codex protocol adapter translates it to
+`model_reasoning_effort`; the Claude adapter translates the same normalized value to `--effort`.
+The removed `reasoning_effort` workflow key is not a compatibility alias.
 
 Runner events are normalized from JSONL; stdin is closed; stdout and stderr are drained with bounds.
 The production lifecycle contract is argv-only process groups with TERM, a bounded grace period,
@@ -27,7 +43,7 @@ production command supervisor remains Phase 1 work.
 Runner environments start from an allowlist (`HOME`, `PATH`, locale, temporary-directory and agent
 socket variables), add explicit project variables, and redact secret-shaped names from diagnostics.
 Copying the complete parent environment is corrected and must not be reintroduced, especially with
-unrestricted execution. Vendored Stokowski commit `342862a` enforces this both while constructing
-the project environment and immediately before spawning the agent process; its subprocess test
-observes that `SSH_AUTH_SOCK` and declared project values cross the boundary while unrelated and
-secret-shaped ambient variables do not.
+unrestricted execution. Vendored Stokowski commit `342862a` introduced enforcement both while
+constructing the project environment and immediately before spawning the agent process; the
+current pin `26c3cff` retains it. Its subprocess test observes that `SSH_AUTH_SOCK` and declared
+project values cross the boundary while unrelated and secret-shaped ambient variables do not.

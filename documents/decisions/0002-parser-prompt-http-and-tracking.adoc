@@ -1,6 +1,14 @@
-= ADR 0002: Parser, prompt, HTTP, and tracking contracts
+= ADR 0002: Parser, prompt, tracker, and tracking contracts
 :status: accepted
 :date: 2026-09-14
+
+== Amendment history
+
+Sep 14, 2026:: The accepted
+link:../pluggable-cli-tracker-interface-decision.adoc[pluggable CLI tracker decision] superseded the
+proposed in-process HTTP boundary. The initial Linear and GitHub adapters invoke unattended `lc`
+and `gh` processes, including permitted CLI API subcommands; provider HTTP shapes do not escape
+those adapters.
 
 == Decision
 
@@ -15,9 +23,17 @@ adoption and executable corpus coverage for conditions and the `lower` filter ar
 1 because Phase 0 does not render prompts. Python's flat keys and forced false rework flag are
 corrections, not compatibility targets.
 
-Req with an injected test adapter is the selected future HTTP boundary. Phase 0 adds no live Linear
-client. Fixtures require pagination, `assignee: me`, partial errors, malformed/null nodes, and
-authenticated-user scoping before the later adapter is admitted.
+Phase 0 adds no live tracker client. The Linear response fixture retains legacy provenance for
+pagination, `assignee: me`, partial errors, malformed/null nodes, and authenticated-user scoping,
+but it is not the future transport contract. The production Linear boundary is unattended `lc`
+machine output normalized by `Stokowski.Tracker.Lc`; direct in-process Linear HTTP is excluded by
+the superseding tracker decision.
+
+The normalized tracker contract requires priority plus creation and update timestamps for
+deterministic admission ordering. The pinned `lc` output does not yet expose all of that metadata,
+so the ledger records it as deferred on
+https://linear.app/the-rubyists/issue/EXT-64[EXT-64].
+Fantasia must not work around that CLI gap by opening a direct Linear API connection.
 
 Tracking reads both legacy `stokowski:` and versioned `fantasia:v1:` markers, validates embedded
 timestamps, and selects the newest timestamp independent of response order. New writes use only the

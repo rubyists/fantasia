@@ -1,5 +1,5 @@
 - id: yaml-normalization
-  source: vendor/stokowski@b80db05
+  source: vendor/stokowski@26c3cff
   fixture: apps/stokowski/test/fixtures/config/full-workflow.yaml
   input: YAML workflow with anchors, scalars, and normalized state names
   output: one immutable string-keyed workflow map
@@ -27,10 +27,10 @@
   disposition: correct
   adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
 - id: codex-argv
-  source: vendor/stokowski@b80db05
+  source: vendor/stokowski@26c3cff
   fixture: apps/stokowski/test/fixtures/runners/codex.yaml
-  input: Codex agent state with high reasoning
-  output: danger-full-access ephemeral JSONL argv with approval never
+  input: Codex agent state with unified max effort
+  output: unrestricted JSONL argv with the provider-specific effort translation
   disposition: preserve
   adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
 - id: codex-events
@@ -48,10 +48,10 @@
   disposition: correct
   adr: documents/decisions/0001-phase-0-compatibility-and-provenance.adoc
 - id: codex-session
-  source: vendor/stokowski@b80db05
+  source: vendor/stokowski@26c3cff
   fixture: apps/stokowski/test/fixtures/runners/codex.yaml
-  input: checked-in session request
-  output: every Codex phase is explicitly fresh
+  input: optional persisted native Codex thread reference
+  output: fresh invocation without a reference or codex exec resume with one
   disposition: correct
   adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
 - id: runner-environment
@@ -75,6 +75,13 @@
   output: authenticated-user scoped admission and safe malformed-node rejection
   disposition: preserve
   adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
+- id: lc-priority-metadata
+  source: vendor/linear-cli@1cc36ffe0a0d728b36d8c5914f114ae9e99751d8
+  fixture: apps/stokowski/test/fixtures/trackers/lc-metadata.yaml
+  input: unattended lc JSON used for normalized priority and stable ordering
+  output: priority and created or updated timestamps tracked by EXT-64
+  disposition: defer
+  adr: documents/pluggable-cli-tracker-interface-decision.adoc
 - id: continuum-input
   source: vendor/Continuum@237dfbb
   fixture: apps/stokowski/test/fixtures/config/normalized-flow.yaml

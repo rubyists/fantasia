@@ -37,10 +37,14 @@ defmodule Stokowski.Compatibility do
 
   defp validate_row(row, repository_root) when is_map(row) do
     missing = @required_fields -- Map.keys(row)
+    invalid = Enum.reject(@required_fields, &non_empty_string?(row[&1]))
 
     cond do
       missing != [] ->
         {:error, {:missing_fields, row["id"], missing}}
+
+      invalid != [] ->
+        {:error, {:invalid_required_fields, row["id"], invalid}}
 
       row["disposition"] not in @dispositions ->
         {:error, {:invalid_disposition, row["id"]}}
@@ -60,6 +64,9 @@ defmodule Stokowski.Compatibility do
   end
 
   defp validate_row(_row, _repository_root), do: {:error, :row_must_be_a_map}
+
+  defp non_empty_string?(value) when is_binary(value), do: String.trim(value) != ""
+  defp non_empty_string?(_value), do: false
 
   defp valid_source?(source) when is_binary(source) do
     Regex.match?(~r/^(vendor\/[^@]+@[0-9a-f]{7,40}|codex-cli@[0-9]+\.[0-9]+\.[0-9]+)$/, source)

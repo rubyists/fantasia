@@ -52,6 +52,8 @@ defmodule Stokowski.WorkflowTest do
     assert {:ok, normalized} = Workflow.normalize(workflow)
     assert normalized["states"]["investigate"]["runner"] == "codex"
     assert normalized["states"]["investigate"]["session"] == "fresh"
+    assert normalized["state"]["effort"] == "high"
+    refute Map.has_key?(normalized["state"], "reasoning_effort")
     assert normalized["flags"] == [true, false, nil, 7, 2.5]
     assert byte_size(Workflow.fingerprint(normalized)) == 64
   end

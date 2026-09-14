@@ -14,6 +14,10 @@ defmodule Stokowski.CompatibilityTest do
     assert Enum.any?(rows, &(&1["source"] == "vendor/Continuum@237dfbb"))
     assert Enum.any?(rows, &(&1["source"] == "codex-cli@0.154.0"))
 
+    assert Enum.any?(rows, fn row ->
+             row["id"] == "lc-priority-metadata" and row["disposition"] == "defer"
+           end)
+
     Enum.each(rows, fn row ->
       assert File.regular?(Path.join(root, row["adr"]))
     end)
@@ -35,5 +39,43 @@ defmodule Stokowski.CompatibilityTest do
 
     assert {:error, {:missing_fixture, "missing"}} =
              Compatibility.validate(ledger, tmp_dir)
+  end
+
+  @tag :tmp_dir
+  test "rejects nil, empty, whitespace, and non-string required values", %{tmp_dir: tmp_dir} do
+    fixture = Path.join(tmp_dir, "fixture.yaml")
+    adr = Path.join(tmp_dir, "decision.adoc")
+    ledger = Path.join(tmp_dir, "ledger.yaml")
+
+    File.write!(fixture, "fixture")
+    File.write!(adr, "decision")
+
+    row = %{
+      "id" => "valid",
+      "source" => "codex-cli@0.154.0",
+      "fixture" => "fixture.yaml",
+      "input" => "input",
+      "output" => "output",
+      "disposition" => "preserve",
+      "adr" => "decision.adoc"
+    }
+
+    for field <- ~w(id source fixture input output disposition adr),
+        value <- [nil, "", " \t", 12] do
+      File.write!(ledger, Jason.encode!([Map.put(row, field, value)]))
+
+      assert {:error, {:invalid_required_fields, _row_id, [^field]}} =
+               Compatibility.validate(ledger, tmp_dir)
+    end
+  end
+
+  test "pins the Linear CLI metadata dependency to EXT-64" do
+    fixture = Path.expand("../fixtures/trackers/lc-metadata.yaml", __DIR__)
+
+    assert {:ok, metadata} = YamlElixir.read_from_file(fixture)
+    assert metadata["blocked_by"]["identifier"] == "EXT-64"
+
+    assert metadata["blocked_by"]["url"] ==
+             "https://linear.app/the-rubyists/issue/EXT-64"
   end
 end
