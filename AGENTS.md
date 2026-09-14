@@ -6,6 +6,7 @@ mise toolchain.
 ## Setup and verification
 
 ```shell
+git submodule update --init --recursive
 mise install
 mise exec -- mix setup
 mise exec -- mix format --check-formatted

@@ -32,11 +32,12 @@ but bare +mix help+ did not list them. Targeted help could find a command but
 could not render its module documentation or report a beam location. That is
 not an acceptable command-line interface.
 
-The repository already defines +mix setup+ as the required entry point for a
-fresh checkout, and new Stokowski workspaces run it in +after_create+. It is
-reasonable for setup or compilation to be the boundary after which the other
-repository commands become available. It is not reasonable for those commands
-to remain undiscoverable after that boundary.
+The repository already defines +mix setup+ as the required entry point after
+submodules have been initialized, and new Stokowski workspaces clone with
++--recursive+ before running it in +after_create+. It is reasonable for setup
+or compilation to be the boundary after which the other repository commands
+become available. It is not reasonable for those commands to remain
+undiscoverable after that boundary.
 
 == Requirements
 
@@ -44,8 +45,9 @@ to remain undiscoverable after that boundary.
   short description after the documented setup step.
 * +mix help TASK+ renders the task's full documentation and its compiled beam
   location.
-* A fresh checkout needs only +mise exec -- mix setup+ to prepare both the
-  umbrella and its repository tooling.
+* A checkout created with +git clone --recursive+ needs only
+  +mise exec -- mix setup+ to prepare both the umbrella and its repository
+  tooling.
 * Runtime applications do not own repository-management source or tests.
 * Repository tooling uses the normal Mix compiler and test runner. The root
   mixfile must not implement a second compiler, beam cache, or task registry.
@@ -85,9 +87,52 @@ After +mix clean+, operators must run +mix compile+ or +mix setup+ before using
 repository-management tasks. This is the ordinary lifecycle for tasks owned by
 an umbrella child and is part of this decision, not an accidental limitation.
 
+== Amendment: explicit submodule initialization
+
+Accepted Sep 13, 2026.
+
++mix setup+ does not initialize or update Git submodules. A checkout created
+without +git clone --recursive+ must first run:
+
+[source,shell]
+----
+git submodule update --init --recursive
+----
+
+The +linear.setup+ task checks +vendor/linear-cli+ before starting nested Mix.
+If that submodule is uninitialized or incomplete, it fails without doing more
+work and recommends the scoped recovery command:
+
+[source,shell]
+----
+git submodule update --init --recursive vendor/linear-cli
+----
+
+This keeps setup from mutating repository checkouts while making the required
+precondition and recovery path explicit.
+
+== Amendment: Stokowski owns workflow parsing
+
+Accepted Sep 13, 2026.
+
+Validating the tracked workflow requires a real YAML parser. That parser is
+also part of the native Stokowski application's domain, so implement it as
++Stokowski.Workflow+ in +apps/stokowski+ rather than as repository-management
+code.
+
++:repo_management+ may declare an in-umbrella dependency on +:stokowski+
+solely to use this workflow contract. This narrow exception supersedes the
+original requirement that +:repo_management+ be dependency-free; it does not
+move repository-wide Mix tasks or their tests into a runtime application.
+
+The +mix stokowski+ task continues to own Fantasia's repository policy: a
+tracked +api_key+ value must be omitted or reference an environment variable.
+The Stokowski parser only parses the workflow and exposes the values needed to
+enforce that policy.
+
 == Evidence
 
-An isolated clean umbrella verified the proposed bootstrap sequence:
+An isolated clean umbrella verified the accepted bootstrap sequence:
 
 * before setup, the child task was not listed by +mix help+;
 * the root +setup+ alias ran +compile+ and then invoked +linear.setup+
@@ -99,6 +144,13 @@ An isolated clean umbrella verified the proposed bootstrap sequence:
 
 This proves the behavior at the Mix task-discovery boundary rather than
 inferring it from project structure.
+
+The workflow parsing amendment was verified at the parser and task boundaries.
+Tests cover block and flow maps, quoted and escaped keys, project trackers,
+duplicate keys, earlier YAML documents, malformed YAML, and error messages that
+do not reveal rejected values. A real +mix stokowski --dry-run+ also accepted
+Fantasia's tracked workflow and reached the vendored CLI's configuration-valid
+result.
 
 == Rejected alternatives
 

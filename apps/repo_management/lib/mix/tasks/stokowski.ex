@@ -1,11 +1,18 @@
 defmodule Mix.Tasks.Stokowski do
   @moduledoc """
   Launches the vendored Stokowski CLI against Fantasia's root workflow.
+
+  Before launch, the task parses `workflow.yaml` with the native Stokowski
+  workflow parser. Every `api_key` value must be an environment reference such
+  as `$LINEAR_API_KEY`; literal values are rejected without being printed.
   """
 
   use Mix.Task
 
+  alias Stokowski.Workflow
+
   @shortdoc "Runs vendored Stokowski with the root workflow"
+  @environment_reference ~r/^\$[A-Za-z_][A-Za-z0-9_]*$/
 
   @impl Mix.Task
   def run(args) do
@@ -15,7 +22,7 @@ defmodule Mix.Tasks.Stokowski do
 
     ensure_file!(workflow, "workflow.yaml")
     ensure_vendor!(vendor)
-    reject_literal_api_key!(workflow)
+    validate_api_key!(workflow)
 
     uv = executable!("uv")
     executable!("codex")
@@ -23,18 +30,7 @@ defmodule Mix.Tasks.Stokowski do
     lockfile = Path.join(vendor, "uv.lock")
     lockfile_existed? = File.exists?(lockfile)
 
-    command_args = [
-      "run",
-      "--project",
-      vendor,
-      "--extra",
-      "web",
-      "--with-editable",
-      vendor,
-      "--",
-      "stokowski",
-      workflow | args
-    ]
+    command_args = uv_args(vendor) ++ ["stokowski", workflow | args]
 
     {_output, status} =
       try do
@@ -53,6 +49,28 @@ defmodule Mix.Tasks.Stokowski do
       Mix.raise("vendored Stokowski exited with status #{status}")
     end
   end
+
+  @doc false
+  def validate_api_key!(workflow) do
+    case Workflow.read(workflow) do
+      {:ok, parsed_workflow} ->
+        if Enum.all?(Workflow.api_key_values(parsed_workflow), &environment_reference?/1) do
+          :ok
+        else
+          Mix.raise(
+            "workflow.yaml must not contain a literal tracker.api_key; use $LINEAR_API_KEY instead"
+          )
+        end
+
+      {:error, _error} ->
+        Mix.raise("could not safely parse tracker.api_key in workflow.yaml")
+    end
+  end
+
+  defp environment_reference?(value) when is_binary(value),
+    do: Regex.match?(@environment_reference, value)
+
+  defp environment_reference?(_value), do: false
 
   defp umbrella_root do
     Path.expand("../../../../..", __DIR__)
@@ -79,30 +97,16 @@ defmodule Mix.Tasks.Stokowski do
     end
   end
 
-  defp reject_literal_api_key!(workflow) do
-    workflow
-    |> File.stream!()
-    |> Enum.reject(&String.starts_with?(String.trim_leading(&1), "#"))
-    |> Enum.find(&literal_api_key?/1)
-    |> case do
-      nil ->
-        :ok
-
-      _line ->
-        Mix.raise(
-          "workflow.yaml must not contain a literal tracker.api_key; use $LINEAR_API_KEY instead"
-        )
-    end
-  end
-
-  defp literal_api_key?(line) do
-    case Regex.run(~r/^\s*api_key\s*:\s*(.+?)\s*$/, line) do
-      [_, value] -> not env_reference?(value)
-      nil -> false
-    end
-  end
-
-  defp env_reference?(value) do
-    Regex.match?(~r/^['\"]?\$[A-Za-z_][A-Za-z0-9_]*['\"]?(?:\s+#.*)?$/, value)
+  defp uv_args(vendor) do
+    [
+      "run",
+      "--project",
+      vendor,
+      "--extra",
+      "web",
+      "--with-editable",
+      vendor,
+      "--"
+    ]
   end
 end

@@ -1,6 +1,12 @@
 defmodule Mix.Tasks.Linear.Setup do
   @moduledoc """
   Fetches dependencies for the vendored Linear CLI application.
+
+      mix linear.setup
+
+  `vendor/linear-cli` must be initialized first. If it is missing, run
+  `git submodule update --init --recursive vendor/linear-cli` from the
+  repository root.
   """
 
   use Mix.Task
@@ -9,16 +15,27 @@ defmodule Mix.Tasks.Linear.Setup do
 
   @impl Mix.Task
   def run(args) do
+    run(args, repository_root())
+  end
+
+  @doc false
+  def run(args, root) do
     if args != [] do
       Mix.raise("mix linear.setup does not accept arguments")
     end
 
-    root = repository_root()
+    checkout = Path.join([root, "vendor", "linear-cli"])
     app = Path.join([root, "vendor", "linear-cli", "app"])
+
+    unless File.exists?(Path.join(checkout, ".git")) do
+      Mix.raise(
+        "vendor/linear-cli is not initialized; run git submodule update --init --recursive vendor/linear-cli"
+      )
+    end
 
     unless File.regular?(Path.join(app, "mix.exs")) do
       Mix.raise(
-        "vendored Linear CLI is missing; run git submodule update --init vendor/linear-cli"
+        "vendor/linear-cli is incomplete; run git submodule update --init --recursive vendor/linear-cli"
       )
     end
 

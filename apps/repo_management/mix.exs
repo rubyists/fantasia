@@ -10,7 +10,7 @@ defmodule RepoManagement.MixProject do
       deps_path: "../../deps",
       lockfile: "../../mix.lock",
       elixir: "~> 1.20",
-      deps: []
+      deps: [{:stokowski, in_umbrella: true}]
     ]
   end
 end
