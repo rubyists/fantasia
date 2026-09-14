@@ -180,7 +180,7 @@ states:
     prompt: .ai/prompts/investigate.md
     linear_state: active
     runner: codex
-    model: sol
+    model: gpt-5.6-sol
     effort: xhigh
     max_turns: 8
     session: inherit
@@ -207,7 +207,7 @@ states:
     linear_state: active
     runner: codex
     effort: max
-    model: luna
+    model: gpt-5.6-luna
     max_turns: 30
     session: inherit
     transitions:
