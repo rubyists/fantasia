@@ -1,0 +1,460 @@
+= Pluggable CLI tracker interface
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 14, 2026
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:status: Accepted
+:status_comment: Accepted by Fantasia maintainers on Sep 14, 2026
+:toc:
+
+== Status
+
+{status}:: {status_comment}
+
+This decision supersedes the fixed-Linear and direct-GraphQL assumptions in
+link:initial-plan.adoc[the initial Elixir port plan]. +lc+ and +gh+ are the
+initial built-in tracker adapters, not special cases in the workflow engine.
+
+It is the tracker-side companion to
+link:pluggable-runner-interface-decision.adoc[the pluggable runner decision].
+Both boundaries use registries, normalized domain values, explicit
+capabilities, shared process policy, and conformance fixtures.
+
+== Context
+
+Fantasia's deterministic phase graph should not depend on the product-specific
+shape of a Linear issue, a GitHub Project item, or either service's transport.
+The initial plan already names +Stokowski.Tracker+ as a behavior, but then
+defines its only production implementation as a direct Linear GraphQL client.
+It also embeds Linear into dispatch, recovery, configuration, tests, security,
+and the definition of done. Read literally, that permits a nominal behavior
+whose real contract is still the Linear API.
+
+That would make a second tracker a cross-cutting change. It would also make
+Fantasia responsible for each provider's HTTP client, authentication scheme,
+pagination, rate limits, retry rules, API schema, generated types, and error
+redaction. Adding MCP beside those clients would add another connection,
+discovery, capability, trust, and lifecycle surface.
+
+For the first release, the desired ownership boundary is smaller: invoke a
+tracker's maintained command-line interface exactly as an unattended operator
+would. The CLI owns its provider API and authentication behavior. Fantasia owns
+the normalized tracker contract, deterministic workflow semantics, process
+safety, and translation performed by its adapter.
+
+The two initial CLIs offer enough domain commands to establish that boundary:
+
+* +lc+ provides structured issue list/view, comment, status, assignment,
+  relation, identity, and version commands through global +--output json+;
+* +gh+ provides structured GitHub Issue reads and GitHub Projects field/item
+  commands, issue comments and mutations, explicit repository/project scope,
+  and a documented prompt-disable environment setting.
+
+Their command shapes and data models are different. That difference belongs in
+adapters, not in orchestration.
+
+== Decision
+
+=== Primary invariant
+
+Fantasia is tracker-pluggable by design.
+
+Adding an in-tree CLI-backed tracker must require only:
+
+* one adapter implementation;
+* one registry entry; and
+* adapter-specific fixtures run through the shared tracker conformance suite.
+
+It must not require changes to the workflow engine, phase machine, admission
+controller, project or issue supervisors, runner dispatch, workspace manager,
+tracking/recovery projection, dashboard, or generic configuration validator.
+
++lc+ and +gh+ must use the same registration, request, result, failure,
+capability, and command-execution paths available to another tracker. The
+first release ships those two production adapters and a fake conformance
+adapter. This invariant is part of Fantasia 0.1.0's definition of done.
+
+=== CLI-only provider boundary
+
+The first tracker transport boundary is a short-lived, unattended child
+process.
+
+[source,text]
+----
+                         deterministic workflow engine
+                                    |
+                       normalized tracker operation
+                                    |
+                        Stokowski.Tracker.Registry
+                                    |
+                   +----------------+----------------+
+                   |                                 |
+             Stokowski.Tracker.Lc              Stokowski.Tracker.Gh
+                   |                                 |
+                  lc                                gh
+                   +----------------+----------------+
+                                    |
+                           provider-owned API
+----
+
+Fantasia does not call Linear or GitHub HTTP, REST, or GraphQL endpoints
+directly. It does not use an MCP server for tracker work. An adapter also must
+not evade this rule through a generic API passthrough such as +gh api+ or a raw
+GraphQL command. Only documented, provider-domain CLI commands are part of the
+initial boundary.
+
+The fact that +lc+ and +gh+ internally use provider APIs does not make those
+APIs Fantasia contracts. Their maintainers own that translation. Fantasia
+pins and tests the CLI behavior it consumes.
+
+A future direct API, SDK, MCP, or long-lived transport requires a new ADR. That
+decision must explicitly take ownership of authentication, connection
+lifecycle, pagination, rate limiting, retries, idempotency, API/schema
+compatibility, payload bounds, secret handling, observability, and test
+infrastructure. It must not arrive as an adapter implementation detail.
+
+=== Layered tracker boundary
+
++Stokowski.Tracker+ is the provider-neutral behavior. It defines semantic
+operations and normalized values; it does not expose argv, JSON field names,
+GraphQL node IDs, repository-specific labels, or Linear workflow-state types.
+
++Stokowski.Tracker.Registry+ resolves an operator-selected registration name to
+an adapter kind and validated adapter configuration.
+
++Stokowski.Tracker.Lc+ and +Stokowski.Tracker.Gh+ own:
+
+* capability and compatible-version reporting;
+* validation of their namespaced scope and state-mapping options;
+* construction of documented domain-command argv;
+* decoding and validation of machine-readable output;
+* provider error classification; and
+* translation between native and normalized identities, items, comments,
+  relationships, priorities, and workflow states.
+
++Stokowski.Command+ owns the reusable one-shot process policy: direct exec,
+environment filtering, timeout, concurrent bounded output capture, process-tree
+termination, redaction, and exit collection. A tracker adapter must not grow a
+second subprocess implementation.
+
+=== Normalized tracker contract
+
+The initial semantic operations are:
+
+* +probe+ -- report adapter identity, CLI version, authentication state, and
+  available capabilities without mutation;
+* +resolve_scope+ -- validate the configured organization, repository,
+  project, team, and workflow-state mapping;
+* +list_items+ -- return a bounded candidate or reconciliation page for
+  normalized lifecycle roles and filters;
+* +get_item+ -- read one item with the comments and relationships needed for
+  prompts, blocker checks, and recovery;
+* +set_state+ -- move an item to a configured normalized lifecycle role;
+* +append_comment+ -- add a bounded tracking or operator-visible comment; and
+* +assign+ -- apply the configured assignee policy when the workflow requires
+  it.
+
+Each operation carries stable project, scope, effect, and deadline identity.
+It returns a normalized value or a classified error. No callback returns a
+provider client or raw response for the caller to continue interpreting.
+
+The normalized work item includes:
+
+* a tracker registration and opaque native ID;
+* a stable human identifier and canonical URL;
+* title and bounded description;
+* normalized lifecycle role plus native state name;
+* assignees and labels;
+* optional normalized priority;
+* creation and update timestamps;
+* blocker references and their terminal status; and
+* ordered comments with stable ID, author, timestamp, and bounded body.
+
+Optional values remain explicitly unavailable rather than receiving invented
+defaults. Core ordering is deterministic: normalized priority when available,
+then creation time, then stable identifier. A tracker without native priority
+orders its items after items with configured priority while preserving the
+remaining tie breakers.
+
+=== State mapping belongs to the adapter
+
+The workflow engine uses logical lifecycle roles such as +todo+, +active+,
++review+, +gate_approved+, +rework+, and +terminal+. It never asks whether a
+Linear workflow state, GitHub Issue state, label, or Project field means one of
+those roles.
+
+The +lc+ adapter maps roles to configured Linear workflow-state names. The
++gh+ adapter maps roles to configured options of a GitHub Projects
+single-select field, normally +Status+. Issue +open+ or +closed+ remains a
+separate native attribute; an optional configured terminal action may close
+the issue after the project state is updated.
+
+A repository-only GitHub configuration cannot represent the complete gate and
+rework protocol through +open+ and +closed+ alone. It fails validation when the
+selected workflow needs those roles and no suitable Project field is
+configured. Labels remain normalized classification data, not an implicit
+lifecycle-state fallback.
+
+State mappings are captured in the validated workflow snapshot. Hot reload may
+replace them only at a deterministic phase boundary. Recovery records the
+tracker registration, adapter kind/version, native item ID, and state mapping
+version so one provider's reference cannot be interpreted by another adapter.
+
+=== Registry and configuration
+
+Tracker references resolve through a registry rather than a +linear | github+
+case expression. The registration name and adapter kind are separate so two
+instances of one adapter may use different accounts, hosts, repositories, or
+projects.
+
+An explicit configuration may take this form:
+
+[source,yaml]
+----
+trackers:
+  linear-work:
+    adapter: lc
+    command: lc
+  github-work:
+    adapter: gh
+    command: gh
+
+projects:
+  - name: fantasia
+    tracker:
+      registration: github-work
+      repository: rubyists/fantasia
+      project_owner: rubyists
+      project_number: 7
+      state_field: Status
+      states:
+        todo: Todo
+        active: In Progress
+        review: Human Review
+        gate_approved: Approved
+        rework: Rework
+        terminal: Done
+----
+
+The exact YAML shape is finalized with schema fixtures, but these properties
+are normative:
+
+* generic validation resolves registration names through the registry;
+* shared lifecycle roles have one normalized representation;
+* provider-specific scope and options remain under the tracker registration or
+  project tracker mapping and are validated by the adapter;
+* command configuration is an executable plus argv prefix, never a shell
+  string; and
+* secrets are not tracker configuration values.
+
+For Stokowski migration, +tracker.kind: linear+ resolves to the built-in +lc+
+adapter, +project_slug+ remains an +lc+ scope option, and +linear_states+ is
+normalized into the shared lifecycle-role mapping. A +tracker.api_key+
+environment reference may become an environment allowlist dependency, but a
+literal credential is rejected with a migration diagnostic. The adapter never
+puts credentials in argv.
+
+=== Capabilities
+
+Every adapter reports capabilities discovered from its implementation and CLI
+probe. The initial vocabulary includes:
+
+* +candidate_query+;
+* +item_read+;
+* +comments_read+ and +comment_append+;
+* +workflow_state_read+ and +workflow_state_write+;
+* +assignee_filter+ and +assignment+;
+* +labels+;
+* +priority+;
+* +blockers+;
+* +projects+; and
+* +terminal_close+.
+
+Stable identity, candidate discovery, item and comment reads, comment append,
+and readable/writable lifecycle state are the minimum Fantasia tracker
+contract. Workflow validation rejects a required optional capability when it
+is unavailable. It must not silently skip blocker checks, assignment, or a
+configured state transition.
+
+Some optional data has a deterministic degradation. Missing native priority
+uses the ordering rule above. Missing labels omits label-based filtering only
+when the workflow did not request it. A missing terminal-close capability does
+not matter when terminal completion is represented solely by the configured
+workflow state.
+
+=== Unattended process contract
+
+Every tracker invocation follows these rules:
+
+* launch the executable directly with an argv list and no intermediate shell;
+* close stdin by default, allocate no TTY, and disable prompts, editors,
+  browsers, pagers, colors, spinners, and update notices where the CLI permits;
+* request JSON or another explicitly versioned machine-readable format for
+  every read and for mutations that support it;
+* drain stdout and stderr concurrently into separate bounded buffers;
+* enforce an operation deadline and bounded process-tree termination;
+* treat malformed, truncated, or trailing non-protocol stdout as a protocol
+  failure;
+* classify exit status, stderr, timeout, and decoded provider errors without
+  matching human prose in workflow logic; and
+* never expose credentials or unbounded provider payloads in logs, events,
+  reports, or dashboard projections.
+
+Comment and description bodies use a private, bounded temporary file passed to
+the CLI's documented +--body-file+ option. They do not travel in argv, and
+stdin remains closed so a missing input flag cannot hang a worker. Fantasia
+removes the temporary file after the child exits.
+
+The +gh+ adapter sets at least +GH_PROMPT_DISABLED=1+, +GH_PAGER=cat+,
++PAGER=cat+, +NO_COLOR=1+, +GH_NO_UPDATE_NOTIFIER=1+, and
++GH_NO_EXTENSION_UPDATE_NOTIFIER=1+ in its filtered child environment. It uses
++--repo+ or explicit Project owner/number flags and structured +--json+ or
++--format json+ output. Equivalent +lc+ operations supply all arguments that
+would otherwise prompt and use +--output json+.
+
+=== Initial adapter obligations
+
+The pinned +lc+ already exposes the required domain commands and a global JSON
+mode. Before +Stokowski.Tracker.Lc+ is production-ready, its conformance work
+must add any normalized fields absent from the current JSON schema, including
+priority and stable issue/comment ordering metadata. Fantasia must not fill a
+CLI gap by reaching directly into Linear GraphQL.
+
+The +gh+ adapter uses +gh issue list/view/comment/edit/close/reopen+ and
++gh project list/field-list/item-list/item-add/item-edit+ as needed. It joins
+Issue data with configured Project fields inside the adapter. Because
++gh issue comment+ does not return JSON, the adapter confirms its exit and then
+uses a structured read to reconcile the effect marker. It never substitutes
++gh api+.
+
++fantasia doctor+ verifies executable discovery, compatible version, machine
+output, authentication, scope access, required Project fields/state options,
+and declared capabilities without mutation. In particular, +gh auth status
+JSON must be decoded rather than trusted by exit code alone because that
+command documents a successful JSON-mode exit even for some authentication
+problems. +lc version --output json+ and +lc whoami --output json+ provide the
+corresponding +lc+ probes.
+
+Compatible CLI versions and response shapes are pinned in adapter fixtures.
+An unrecognized version or schema fails +doctor+ and dispatch clearly; the
+adapter does not guess at a changed protocol.
+
+=== Credentials, retries, and effect reconciliation
+
+The CLI owns credential acquisition and storage. Fantasia supplies only a
+minimal adapter-specific environment allowlist, such as +LINEAR_API_KEY+ for
++lc+ or the documented +GH_TOKEN+ family and +GH_HOST+ for +gh+. Values remain
+redacted secrets and are never copied into normalized work items or persisted
+workflow snapshots.
+
+Fantasia retries only failures classified by the adapter as transient, using
+the workflow's bounded backoff and deadline. It does not retry validation,
+authentication, authorization, malformed-output, incompatible-version, or
+not-found failures as though they were network noise.
+
+CLI commands do not provide a uniform idempotency key. Fantasia therefore
+embeds a stable effect ID in structured tracking comments, reads before a
+repeat, compares state before mutation, and reads back uncertain results. The
+external boundary remains explicitly at-least-once across machine failure.
+
+== Acceptance evidence
+
+Before either production tracker adapter merges, the shared conformance suite
+must prove:
+
+* the same synthetic workflow discovers, reads, transitions, comments on, and
+  recovers an item through +lc+, +gh+, and a third fake CLI adapter without
+  tracker-name branching in the core;
+* both initial adapters normalize state roles, comments, blockers, assignment,
+  labels, priority availability, timestamps, and stable identity consistently;
+* GitHub Project status changes and Linear workflow-state changes produce the
+  same phase events;
+* missing required Project fields, status options, authentication, commands,
+  capabilities, and incompatible CLI versions fail before dispatch;
+* JSON chunking, malformed output, non-protocol stdout, large stderr, timeout,
+  process-tree cleanup, and nonzero exits are bounded and classified;
+* stdin is closed and an omitted body/input flag cannot leave a child waiting;
+* comment files are private, bounded, and removed on success, failure,
+  cancellation, and supervisor restart;
+* ambiguous mutation outcomes reconcile by stable effect ID without silently
+  advancing the phase twice;
+* secrets do not appear in argv, output captures, diagnostics, telemetry,
+  reports, or dashboard projections; and
+* adding the fake adapter touches no core module outside its registry fixture.
+
+Default tests use fake executables and captured provider fixtures. They require
+no network, tracker account, or credential. Opt-in +lc+ and +gh+ smoke tests use
+designated sandbox work items and never mutate production projects.
+
+== Consequences
+
+Fantasia accepts adapter and conformance work up front. The normalized tracker
+types, operation semantics, lifecycle roles, capability vocabulary, and CLI
+protocol fixtures become versioned internal contracts.
+
+In return:
+
+* the phase engine is independent of Linear and GitHub data models;
+* provider API and authentication churn stays behind maintained CLIs;
+* both tracker subprocesses receive the same timeout, output, stdin, cleanup,
+  and redaction policy;
+* deterministic tests need neither network access nor provider credentials;
+* a third CLI tracker is localized to one adapter; and
+* any future API or MCP expansion is visible and reviewable rather than an
+  incidental dependency.
+
+The CLI boundary does not eliminate provider differences or network failures.
+It deliberately limits which layer owns them.
+
+== Rejected alternatives
+
+=== Keep Linear as the real contract behind a nominal behavior
+
+A behavior whose types, filters, errors, and state machine all expose Linear
+still requires core edits for GitHub. It does not satisfy the primary
+invariant.
+
+=== Build direct Linear and GitHub API clients now
+
+Direct clients expand Fantasia's authentication, schema, pagination, rate
+limit, retry, dependency, testing, and security surface before orchestration is
+implemented. The maintained +lc+ and +gh+ commands are the chosen first
+boundary.
+
+=== Use +gh api+ or raw GraphQL because it is still a CLI
+
+A generic passthrough makes provider API fields and mutations Fantasia's
+contract while preserving only the process-launch syntax. It defeats the
+ownership boundary and is rejected.
+
+=== Use MCP tracker servers
+
+MCP adds discovery, connection lifecycle, permissions, host integration, and a
+second protocol surface. It is not part of unattended tracker execution for
+the first release.
+
+=== Model GitHub lifecycle with open and closed only
+
+Two states cannot represent todo, active work, review, approval, and rework.
+The initial +gh+ adapter uses an explicitly configured Project single-select
+field and rejects insufficient configurations.
+
+=== Use labels implicitly as GitHub workflow states
+
+Labels are useful classification data, but implicit state labels permit
+multiple contradictory states and blur user labels with lifecycle ownership.
+An explicit future adapter option may define and validate such a mode; it is
+not the initial default.
+
+=== Let each adapter manage subprocesses independently
+
+Duplicated process code would repeat the exact stdin, timeout, buffering,
+orphan, and redaction failures the common command owner exists to prevent.
+Tracker adapters construct and decode commands; +Stokowski.Command+ owns them.

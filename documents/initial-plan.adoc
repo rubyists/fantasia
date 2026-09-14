@@ -27,6 +27,22 @@ Where this plan conflicts with that requirement, the superseding decision
 controls.
 ====
 
+[IMPORTANT]
+====
+Superseding decision:
+link:pluggable-cli-tracker-interface-decision.adoc[Pluggable CLI tracker
+interface].
+
+Every Linear-specific tracker reference in this plan describes the legacy
+compatibility source and the initial +lc+ adapter, not the core architecture.
+The Elixir port must use a tracker registry, normalized tracker contract,
+capability model, and shared conformance suite. +lc+ and +gh+ are the first
+production adapters, and all provider access is through unattended domain CLI
+commands. Direct HTTP/GraphQL clients, generic API passthrough commands, SDKs,
+and MCP tracker integrations are outside this decision. Where this plan
+conflicts with those requirements, the superseding decision controls.
+====
+
 == Purpose
 
 Port the behavior of +vendor/stokowski+ into the existing Elixir umbrella as
@@ -35,7 +51,8 @@ Port the behavior of +vendor/stokowski+ into the existing Elixir umbrella as
 The port does not need to resemble the Python implementation internally. It
 does need to preserve the useful operator contract:
 
-* Linear issues drive autonomous work.
+* Work items from a configured tracker drive autonomous work. +lc+ for Linear
+  and +gh+ for GitHub Issues/Projects are the initial built-in adapters.
 * Work advances through an explicit, deterministic phase graph.
 * Every agent phase has its own prompt.
 * Every agent phase may independently select a registered runner and a model
@@ -94,8 +111,11 @@ without restarting its workflow from the beginning.
   decision], with +claude+ and +codex+ as the initial built-in adapters.
 * Retain three-layer prompt assembly: global prompt, phase prompt, and
   generated lifecycle context.
-* Retain Linear polling, priority ordering, blocker checks, structured
-  tracking comments, and restart reconstruction.
+* Retain tracker polling, priority ordering, blocker checks, structured
+  tracking comments, and restart reconstruction through the pluggable CLI
+  tracker contract required by
+  link:pluggable-cli-tracker-interface-decision.adoc[the superseding tracker
+  decision].
 * Retain isolated per-issue workspaces and all five lifecycle hooks.
 * Retain retry backoff, turn timeout, stall timeout, cancellation, session
   policy, and process-tree cleanup.
@@ -108,7 +128,11 @@ without restarting its workflow from the beginning.
 === Non-goals for the initial compatibility release
 
 * Reproducing Python module boundaries or asyncio behavior.
-* Adding issue trackers other than Linear.
+* Shipping production tracker adapters other than +lc+ and +gh+. The pluggable
+  interface and its third fake conformance adapter remain initial-release
+  requirements under the superseding tracker decision.
+* Direct tracker API/SDK clients, generic API passthrough commands, or MCP
+  tracker integrations.
 * Shipping production runners other than Claude Code and Codex. The pluggable
   interface and its third fake conformance adapter remain initial-release
   requirements under the superseding runner decision.
@@ -187,23 +211,24 @@ a third conformance adapter, and once with a mixed three-runner graph.
 attempt, run, comments, and rework data.
 |Snapshot tests against the vendored prompt corpus.
 
-|Linear dispatch
-|Poll configured projects/states, paginate, normalize issues, sort by priority,
-creation time, then identifier, and skip unresolved blockers in the configured
-Todo state.
-|Mock GraphQL tests covering pagination, ordering, blockers, malformed
-responses, rate limiting, and errors.
+|Tracker dispatch
+|Resolve a registered tracker, poll configured scopes/states through its
+unattended CLI adapter, normalize work items, sort by priority, creation time,
+then identifier, and skip unresolved blockers in the configured todo role.
+|Fake +lc+ and +gh+ executable tests covering pagination, ordering, blockers,
+malformed output, transient failures, and errors.
 
 |Gates and rework
-|Enter the gate's mapped Linear state, wait without consuming an agent slot,
+|Enter the gate's mapped tracker state, wait without consuming an agent slot,
 advance on approval, increment the run on rework, and stop/escalate at
 +max_rework+.
 |Scenario tests for approve, rework, direct-to-terminal approval, escalation,
 and restart while waiting.
 
 |Tracking and recovery
-|Linear tracking comments are the initial durable authority; reconstruct phase,
-run, and pending gate state after restart.
+|Structured comments written through the registered tracker are the initial
+durable authority; reconstruct phase, run, and pending gate state after
+restart, including legacy Linear markers.
 |Restart scenarios from state, waiting-gate, approved, rework, malformed, and
 legacy tracking comments.
 
@@ -236,7 +261,7 @@ recheck eligibility before retry, and release all admission slots exactly once.
 |Deterministic clock tests and cancellation-race tests.
 
 |Reconciliation
-|Before new dispatch, stop work moved to terminal, gate, or unrelated Linear
+|Before new dispatch, stop work moved to terminal, gate, or unrelated tracker
 states; clean terminal workspaces and retain gate context.
 |Mock tracker scenarios while a fake runner is active.
 
@@ -333,7 +358,7 @@ model calls these entries phases.
 |terminal
 |none
 |none
-|Move to the first configured terminal Linear state and clean up
+|Move to the first configured terminal tracker state and clean up
 |===
 
 The graph is configurable. Determinism means that, for a given normalized
@@ -355,8 +380,8 @@ Every attempt has a stable identity:
 * A phase's runner exits successfully before +complete+ is applied.
 * A non-zero exit, timeout, stall, hook failure, or lost runner is a classified
   failure and does not advance the graph.
-* A gate consumes a named external decision event. Moving a Linear issue is
-  translated into that event by the tracker boundary.
+* A gate consumes a named external decision event. Moving a tracked work item
+  is translated into that event by the tracker boundary.
 * A terminal event can cancel any non-terminal phase.
 * LLM prose is observability data, not control data.
 
@@ -366,7 +391,7 @@ Each project tick performs work in a stable order:
 
 . Load and validate a candidate configuration; activate only a fully valid
   snapshot.
-. Reconcile running issues against Linear.
+. Reconcile running work items through their registered trackers.
 . Reconcile pending gates, approvals, rework, and terminal moves.
 . Fetch and normalize candidates.
 . Sort candidates by priority, creation time, and identifier.
@@ -387,7 +412,7 @@ Use vendored Continuum as the deterministic workflow/activity boundary, with
 its in-memory journal in the default compatibility release.
 
 * One issue maps to one Continuum workflow run while the service is alive.
-* Agent work, Linear mutations, hooks, and workspace operations are Continuum
+* Agent work, tracker mutations, hooks, and workspace operations are Continuum
   activities.
 * Human gate decisions and external terminal moves enter as signals.
 * The normalized workflow snapshot and its hash are immutable input to an
@@ -395,18 +420,18 @@ its in-memory journal in the default compatibility release.
 * Continuum golden histories verify replay stability as the Elixir code
   evolves.
 
-Linear comments and the workspace remain the cross-restart recovery authority
-for the initial release. On boot, Fantasia reconstructs active issue runs from
-Linear and resumes at the persisted phase boundary. This preserves Stokowski's
-no-database operational model and keeps +brew install fantasia+ useful without
-installing PostgreSQL.
+Structured tracker comments and the workspace remain the cross-restart
+recovery authority for the initial release. On boot, Fantasia reconstructs
+active issue runs through each registered tracker and resumes at the persisted
+phase boundary. This preserves Stokowski's no-database operational model and
+keeps +brew install fantasia+ useful without installing PostgreSQL.
 
 [IMPORTANT]
 ====
 In-memory Continuum history does not make external activities exactly-once
 across a VM or machine crash. Activities must use stable idempotency keys where
-the external API permits it, and recovery must inspect committed Linear
-tracking before repeating work.
+the external command permits it, and recovery must inspect committed tracker
+state before repeating work.
 ====
 
 === Later durable mode
@@ -435,7 +460,7 @@ Stokowski.Application
 |   +-- global/project/phase slot ownership and pause state
 |
 +-- Stokowski.ProjectSupervisor
-|   +-- Stokowski.Project (one per configured Linear project)
+|   +-- Stokowski.Project (one per configured tracker scope)
 |       +-- poll/reconcile loop
 |       +-- gate signal translation
 |       +-- Stokowski.IssueSupervisor
@@ -473,11 +498,20 @@ of required effects.
 |Generic Continuum workflow interpreter for the normalized phase graph.
 
 |+Stokowski.Tracker+
-|Behavior for candidate fetch, state lookup, comments, and mutations.
+|Provider-neutral behavior for candidate fetch, item/state lookup, comments,
+assignment, and mutations.
 
-|+Stokowski.Tracker.Linear+
-|Linear GraphQL adapter, pagination, response validation, timeouts, retries,
-and normalization.
+|+Stokowski.Tracker.Registry+
+|Registration lookup, adapter resolution, capabilities, and delegation of
+namespaced configuration validation.
+
+|+Stokowski.Tracker.Lc+
+|Unattended +lc+ domain-command construction, JSON decoding, Linear scope/state
+mapping, and normalization.
+
+|+Stokowski.Tracker.Gh+
+|Unattended +gh issue+ and +gh project+ domain-command construction, JSON
+decoding, GitHub scope/state mapping, and normalization.
 
 |+Stokowski.Tracking+
 |Versioned structured comments, legacy parser, recent-comment filtering, and
@@ -534,16 +568,17 @@ Pure logic should depend on behaviors rather than global modules:
 * +Stokowski.EventSink+
 
 This makes workflow tests deterministic and allows integration tests to use
-fake runners and a fake Linear server without invoking paid agents.
+fake runners and fake tracker executables without invoking paid agents or live
+tracker services.
 
 == Configuration plan
 
 === Compatibility
 
-The initial parser accepts the Stokowski 0.5.0 keys:
+The initial parser accepts the Stokowski 0.5.0 keys as migration input:
 
 * +tracker+
-* +linear_states+
+* +linear_states+ (normalized into the shared tracker lifecycle roles)
 * +polling+
 * +workspace+
 * +hooks+
@@ -560,10 +595,12 @@ and the normalized result no longer depends on YAML map implementation
 details, except that the first declared agent phase remains the legacy entry
 phase.
 
-Environment references such as +$LINEAR_API_KEY+ remain supported. Credential
-values must be represented as redacted secret values after parsing and must
-never appear in inspect output, logs, dashboard JSON, crash reports, or runner
-argument diagnostics.
+Environment references such as +$LINEAR_API_KEY+ may be translated into a
+tracker adapter's environment allowlist for migration. Credentials are owned
+by the CLI environment or its credential store, never passed in argv or kept
+as normalized tracker configuration. Literal +tracker.api_key+ values are
+rejected with a migration diagnostic. Secret values must never appear in
+inspect output, logs, dashboard JSON, crash reports, or command diagnostics.
 
 === Validation policy
 
@@ -575,13 +612,18 @@ snapshot becomes active.
 * Invalid graph semantics are errors.
 * Missing runner executables are errors for +doctor+ and warnings for offline
   +validate+; they are hard errors before dispatch to that runner.
+* Missing tracker executables are errors for +doctor+ and warnings for offline
+  +validate+; incompatible versions, failed authentication, inaccessible
+  scopes, and missing required capabilities are hard errors before polling or
+  mutation.
 * Missing or unreadable agent prompt files are errors.
 * A gate requires +rework_to+ and an +approve+ transition.
 * Every transition target must exist.
 * At least one agent phase and one terminal phase must exist.
-* Runner values are limited to +claude+ and +codex+.
+* Runner and tracker registration names resolve through their registries; they
+  are not validated against hard-coded enumerations.
 * Limits and timeouts must be non-negative and internally consistent.
-* Duplicate Linear state mappings that make a gate decision ambiguous are
+* Duplicate tracker state mappings that make a gate decision ambiguous are
   rejected.
 * Unreachable phases are warnings initially and may become errors later.
 
@@ -684,8 +726,8 @@ Tracking payloads include enough information to project:
 * stable effect/idempotency identifier where applicable.
 
 Parsers ignore malformed or unrelated HTML comments and select the latest
-valid event by normalized timestamp plus Linear comment order. Recovery never
-executes data embedded in a comment.
+valid event by normalized timestamp plus stable tracker comment order.
+Recovery never executes data embedded in a comment.
 
 === Recovery algorithm
 
@@ -697,7 +739,7 @@ executes data embedded in a comment.
 . Compare the persisted phase and workflow hash with the latest valid config.
 . Reconstruct a Continuum run at that boundary, or surface a configuration
   conflict without dispatching.
-. Reconcile the current Linear state before acquiring a slot.
+. Reconcile the current tracker state before acquiring a slot.
 
 == Runner contract
 
@@ -783,7 +825,7 @@ The plan must define hook failure semantics:
   configurable so an operator can preserve a workspace for diagnosis.
 
 Hook scripts receive a documented environment containing issue, project,
-phase, run, attempt, workspace, and Linear connection metadata. Secret
+phase, run, attempt, workspace, and normalized tracker metadata. Secret
 inheritance is minimized rather than copying the daemon's entire environment
 blindly.
 
@@ -831,8 +873,8 @@ Additive commands make operation and packaging easier:
 ----
 fantasia run [workflow.yaml]
 fantasia validate [workflow.yaml]       # offline parse/graph/prompt checks
-fantasia dry-run [workflow.yaml]        # optional Linear candidate query
-fantasia doctor [workflow.yaml]         # runner, auth, filesystem, and network checks
+fantasia dry-run [workflow.yaml]        # optional tracker candidate query
+fantasia doctor [workflow.yaml]         # tracker, runner, auth, filesystem, and network checks
 fantasia prompt ISSUE --phase PHASE     # exact prompt preview
 fantasia version
 ----
@@ -958,7 +1000,7 @@ fixtures with provenance:
 
 * canonical and legacy workflow files;
 * all example prompt templates;
-* Linear issue/comment payloads;
+* Linear and GitHub work-item/comment payloads as CLI JSON fixtures;
 * Claude stream-json events;
 * Codex output/exit scenarios;
 * structured state and gate comments;
@@ -990,7 +1032,7 @@ rework contexts; nested and flat aliases must agree.
 terminal cancellation, and config-version boundary.
 
 |Adapter tests
-|Mock Linear GraphQL server, temporary filesystem, fake clock, fake command
+|Fake +lc+ and +gh+ executables, temporary filesystem, fake clock, fake command
 runner, fake Claude NDJSON executable, and fake Codex executable.
 
 |Supervision/failure tests
@@ -998,12 +1040,13 @@ runner, fake Claude NDJSON executable, and fake Codex executable.
 orphan cleanup, invalid reload, and network partition.
 
 |End-to-end local tests
-|Temporary git repository, fake Linear server, mixed fake runners, web API,
+|Temporary git repository, mixed fake tracker and runner executables, web API,
 and terminal projection.
 
 |Opt-in live tests
-|A designated Linear sandbox plus installed/authenticated Claude and Codex
-CLIs. These never run on ordinary pull requests or consume tokens implicitly.
+|Designated Linear and GitHub sandboxes plus installed/authenticated +lc+,
++gh+, Claude, and Codex CLIs. These never run on ordinary pull requests or
+consume tokens implicitly.
 
 |Release tests
 |Run the packaged artifact on every target, execute +version+, offline
@@ -1029,6 +1072,8 @@ Deliver:
 * A generic Continuum proof: agent activity, gate signal, rework loop, terminal
   completion, and reconstruction from a persisted boundary.
 * A direct-exec Port proof that terminates a child and grandchild process.
+* +lc+ and +gh+ capability probes using fake executables first and local
+  installed CLIs only when available.
 * Claude and Codex capability probes using fake executables first and local
   installed CLIs only when available.
 * A distribution proof for the preferred self-contained artifact on macOS
@@ -1066,7 +1111,8 @@ Exit criteria:
 
 Implement:
 
-* Linear GraphQL adapter and response normalization;
+* pluggable tracker registry and normalized contract;
+* +lc+ and +gh+ CLI adapters and response normalization;
 * safe workspace lifecycle;
 * hook command boundary;
 * Claude runner;
@@ -1076,8 +1122,8 @@ Implement:
 
 Exit criteria:
 
-* A fake Linear issue completes the entire mixed-runner workflow in a temporary
-  git workspace.
+* Fake Linear and GitHub work items each complete the entire mixed-runner
+  workflow in a temporary git workspace through the same tracker dispatcher.
 * Failure injection leaves no runner or grandchild process behind.
 * No secret appears in captured logs or snapshots.
 
@@ -1096,7 +1142,7 @@ Implement:
 
 Exit criteria:
 
-* Crash/restart scenarios recover from Linear boundaries.
+* Crash/restart scenarios recover from normalized tracker boundaries.
 * Global/project/phase limits hold under concurrency and cancellation races.
 * Two projects run fairly without leaking config, workspaces, or credentials.
 
@@ -1126,7 +1172,7 @@ Complete:
 * canonical workflow migration documentation;
 * security review of hook, prompt, environment, HTTP, and path boundaries;
 * resource bounds and log redaction;
-* opt-in live Linear/Claude/Codex smoke runs;
+* opt-in live +lc+/+gh+/Claude/Codex smoke runs;
 * operator documentation, examples, troubleshooting, and upgrade notes;
 * third-party license/NOTICE inventory.
 
@@ -1236,7 +1282,7 @@ fantasia validate ./workflow.yaml
 fantasia doctor ./workflow.yaml
 ----
 
-+doctor+ may report missing or unauthenticated Claude/Codex CLIs, but the
++doctor+ may report missing or unauthenticated tracker or runner CLIs, but the
 installed Fantasia executable itself must start and validate configuration
 without a source checkout.
 
@@ -1245,10 +1291,10 @@ without a source checkout.
 * Preserve the warning that autonomous runners can execute arbitrary commands.
 * Make dangerous runner permission modes explicit in normalized config and
   startup output.
-* Never log Linear keys or other secret environment values.
+* Never log tracker credentials or other secret environment values.
 * Bind the dashboard to loopback by default.
-* Bound GraphQL, comment, prompt, runner, hook, and log payload sizes.
-* Use HTTP connect/read timeouts and classified retries with jitter where
+* Bound tracker output, comment, prompt, runner, hook, and log payload sizes.
+* Use command deadlines and classified retries with jitter where
   nondeterminism is outside workflow state.
 * Validate all workspace and prompt paths after resolving symlinks.
 * Do not pass the daemon's full environment to runners/hooks without a
@@ -1256,7 +1302,7 @@ without a source checkout.
 * Preserve workspaces on configurable classes of failure for diagnosis; remove
   them only on terminal cleanup or an explicit operator command.
 * Emit telemetry for phase entry/exit, runner start/stop, gate waits, retries,
-  queue wait, Linear request, hook result, and recovery decisions.
+  queue wait, tracker command, hook result, and recovery decisions.
 * Graceful shutdown stops admission, reconciles current ownership, cancels
   runners, waits a bounded interval, and verifies process-tree termination.
 
@@ -1275,7 +1321,7 @@ fixtures, and no phase logic inside argument construction.
 validated phase boundaries; golden histories.
 
 |External activity repeats after a crash
-|Stable attempt/effect identities, idempotent Linear comments/mutations where
+|Stable attempt/effect identities, idempotent tracker comments/mutations where
 possible, recovery inspection, and explicit at-least-once documentation.
 
 |Long-running CLI child is orphaned
@@ -1293,9 +1339,9 @@ limits; defer Oban/Ash until separate ADRs justify them.
 |Build release artifacts from recursive checkouts and ship compiled,
 notice-complete artifacts; formula never builds from an incomplete source zip.
 
-|Linear rate limits or transient failures
-|Paginated bounded client, response validation, backoff, last-known-good state,
-and no transition until mutations are confirmed.
+|Tracker CLI or provider transient failures
+|Bounded command output, response validation, classified backoff,
+last-known-good state, and no transition until mutations are confirmed.
 
 |Config or prompt compatibility is ambiguous
 |Fixture-based normative subset, explicit warnings, migration report, and
@@ -1314,6 +1360,8 @@ These are bounded implementation choices, not open-ended scope:
 . Choose a prompt engine or approve a small Jinja-compatibility renderer after
   corpus tests.
 . Confirm the generic Continuum interpreter and in-memory recovery design.
+. Confirm the pluggable CLI tracker registry and normalized contract, then pin
+  the supported unattended +lc+ and +gh+ domain-command protocols behind it.
 . Confirm the pluggable runner registry and normalized contract, then pin the
   supported Claude and Codex non-interactive command protocols behind it.
 . Select the HTTP/web stack.
@@ -1340,9 +1388,9 @@ Fantasia 0.1.0 is ready for publication when:
   third fake conformance adapter.
 * Single-project and multi-project Stokowski workflow files pass the documented
   migration/conformance suite.
-* Linear dispatch, gates, rework, recovery, workspaces, hooks, retries,
+* +lc+ and +gh+ dispatch, gates, rework, recovery, workspaces, hooks, retries,
   reconciliation, concurrency, sessions, metrics, TUI, and web/API parity are
-  complete.
+  complete through the same normalized tracker path.
 * The full automated suite passes without paid LLM access.
 * Opt-in sandbox runs pass once with Claude, once with Codex, and once with a
   mixed workflow.
@@ -1361,9 +1409,11 @@ small but vertical:
 . Execute a registered fake adapter as a Continuum activity, then prove the
   same path with the fake Claude, Codex, and third-runner adapters.
 . Await an approval signal at the gate.
-. Emit and re-read a compatible structured tracking comment.
+. Emit and re-read a compatible structured tracking comment through a
+  registered fake CLI tracker.
 . Complete the terminal transition.
 . Replay the golden history and package a +fantasia version+ smoke artifact.
 
-That slice proves the highest-risk boundaries before expanding to Linear,
-multi-project admission, real CLI processes, and the operator interfaces.
+That slice proves the highest-risk boundaries before expanding to production
++lc+ and +gh+ adapters, multi-project admission, real CLI processes, and the
+operator interfaces.
