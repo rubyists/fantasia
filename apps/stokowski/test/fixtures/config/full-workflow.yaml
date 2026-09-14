@@ -1,12 +1,14 @@
 defaults: &defaults
   runner: codex
+extra: &extra
   session: fresh
+  runner: claude
 tracker:
   kind: linear
   project_slug: "25967a4634d3"
   assignee: me
 state:
-  <<: *defaults
+  <<: [*defaults, *extra]
   effort: high
 states:
   investigate:

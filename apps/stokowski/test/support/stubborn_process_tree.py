@@ -12,6 +12,13 @@ def ignore_term():
 mode, pid_file = sys.argv[1:]
 ignore_term()
 
+# Create the readiness channel before the detached session and its descendants
+# can append to it. Each PID is written only after that process has installed
+# its SIGTERM handler, so three PIDs is an explicit readiness acknowledgement.
+if mode == "parent":
+    with open(pid_file, "w", encoding="utf-8"):
+        pass
+
 if mode == "grandchild":
     with open(pid_file, "a", encoding="utf-8") as handle:
         handle.write(f"{os.getpid()}\n")
@@ -27,11 +34,13 @@ if mode == "child":
 
 session_pid = os.fork()
 if session_pid:
+    with open(f"{pid_file}.leader", "w", encoding="utf-8") as handle:
+        handle.write(f"{session_pid}\n")
     os.waitpid(session_pid, 0)
     sys.exit(0)
 
 os.setsid()
-with open(pid_file, "w", encoding="utf-8") as handle:
+with open(pid_file, "a", encoding="utf-8") as handle:
     handle.write(f"{os.getpid()}\n")
 child = subprocess.Popen([sys.executable, __file__, "child", pid_file])
 while True:

@@ -11,7 +11,7 @@ mise install
 mise exec -- mix setup
 mise exec -- mix format --check-formatted
 mise exec -- mix test
-mise exec -- mix cmd --app stokowski mix escript.build
+mise exec -- mix do --app stokowski escript.build
 ./fantasia version
 mise exec -- mix phase0.verify
 ```

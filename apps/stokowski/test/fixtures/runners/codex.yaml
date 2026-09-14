@@ -5,6 +5,8 @@ fresh_argv:
   - --json
   - --cd
   - WORKSPACE
+  - --model
+  - MODEL
   - --config
   - 'model_reasoning_effort="max"'
   - PROMPT
@@ -14,6 +16,8 @@ resume_argv:
   - resume
   - --dangerously-bypass-approvals-and-sandbox
   - --json
+  - --model
+  - MODEL
   - --config
   - 'model_reasoning_effort="max"'
   - SESSION_ID

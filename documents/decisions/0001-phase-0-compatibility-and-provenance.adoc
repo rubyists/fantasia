@@ -13,18 +13,21 @@ insufficient evidence because parent mise configuration can place an unrelated e
 The machine-readable ledger at
 `apps/stokowski/test/fixtures/compatibility_ledger.yaml` is the normative Phase 0 index. Every row
 names a source commit or executable version, an immutable fixture, observable input and output, a
-`preserve`, `correct`, or `defer` disposition, and an owning ADR. Tests reject incomplete rows,
-duplicate identifiers, unknown dispositions, invalid provenance, and missing fixtures or ADRs.
+`preserve`, `correct`, or `defer` disposition, and an owning ADR. Tests reject an empty ledger,
+incomplete rows, duplicate identifiers, unknown dispositions, invalid provenance, unavailable
+vendored revisions, and missing fixtures or ADRs. CI fetches complete submodule history before this
+check so an old but ledgered source revision cannot be silently hidden by a shallow checkout.
 
 The historical compatibility evidence baseline is `vendor/stokowski@b80db05`,
-`vendor/Continuum@237dfbb`, and `codex-cli@0.154.0`. Fantasia now pins Stokowski `79fa1bb`, which
+`vendor/Continuum@237dfbb`, `codex-cli@0.154.0`, and Claude Code `2.1.270`. Fantasia now pins Stokowski `79fa1bb`, which
 contains the upstream 1.0 and 1.1 feature sync, unified effort, current model catalogue, session
 continuity, and restored environment containment. ADR 0006 and its machine-readable inventory map
 every commit in `b80db05..79fa1bb` to an explicit feature contract. Ledger rows cite the exact
 source revision that owns their behavior; preserved historical behavior may continue to cite
-`b80db05`. Codex is resolved by asking mise for the checkout-selected executable, probing that
-absolute path, and comparing the observed version with `mise.toml`. The verified directory is
-prepended for the Python child. Startup reports only the executable path and version.
+`b80db05`. Codex and Claude are resolved by asking mise for each checkout-selected executable,
+probing that absolute path, and comparing the observed version with the corresponding `[tools]`
+entry in `mise.toml`. Only verified runner directories are prepended for the Python child. Startup
+reports only each executable path and version.
 
 == Consequences
 

@@ -118,6 +118,33 @@ defmodule Mix.Tasks.StokowskiTest do
     refute Exception.message(error) =~ "0.999.0"
   end
 
+  @tag :tmp_dir
+  test "resolves and verifies the pinned Claude executable", %{tmp_dir: tmp_dir} do
+    {root, _vendor, _invocation} = fake_checkout(tmp_dir, 0)
+
+    assert {_claude, "2.1.270"} = StokowskiTask.resolve_runner!(root, "claude")
+  end
+
+  @tag :tmp_dir
+  test "reads runner pins only from the tools table", %{tmp_dir: tmp_dir} do
+    {root, _vendor, _invocation} = fake_checkout(tmp_dir, 0)
+    File.write!(Path.join(root, "mise.toml"), "[env]\ncodex = \"0.999.0\"\n")
+
+    assert_raise Mix.Error, "mise.toml [tools] table must declare an exact codex version", fn ->
+      StokowskiTask.resolve_codex!(root)
+    end
+  end
+
+  test "provenance fixture describes both verified runners" do
+    fixture = Path.expand("../../../../stokowski/test/fixtures/runners/provenance.yaml", __DIR__)
+    assert {:ok, provenance} = YamlElixir.read_from_file(fixture)
+    assert provenance["resolution"] == "mise which codex"
+    assert provenance["verify"] == "codex --version"
+    assert provenance["claude"]["resolution"] == "mise which claude"
+    assert provenance["claude"]["version"] == "2.1.270"
+    assert provenance["claude"]["reject_drift"]
+  end
+
   defp validate(workflow) do
     StokowskiTask.validate_api_key!(workflow)
   end
@@ -137,7 +164,12 @@ defmodule Mix.Tasks.StokowskiTest do
     File.mkdir_p!(vendor)
     File.mkdir_p!(bin)
     File.write!(Path.join(root, "workflow.yaml"), "tracker: {kind: linear}\n")
-    File.write!(Path.join(root, "mise.toml"), "[tools]\ncodex = \"0.154.0\"\n")
+
+    File.write!(
+      Path.join(root, "mise.toml"),
+      "[tools]\ncodex = \"0.154.0\"\nclaude = \"2.1.270\"\n"
+    )
+
     File.write!(Path.join(vendor, "pyproject.toml"), "")
 
     write_executable!(
@@ -158,9 +190,19 @@ defmodule Mix.Tasks.StokowskiTest do
     codex = Path.join(bin, "codex")
     write_executable!(codex, "#!/bin/sh\nprintf '%s\\n' '#{codex_version}'\n")
 
+    claude = Path.join(bin, "claude")
+    write_executable!(claude, "#!/bin/sh\nprintf '%s\\n' '2.1.270 (Claude Code)'\n")
+
     write_executable!(
       Path.join(bin, "mise"),
-      "#!/bin/sh\n[ \"$1 $2\" = \"which codex\" ] || exit 2\nprintf '%s\\n' '#{codex}'\n"
+      """
+      #!/bin/sh
+      case "$1 $2" in
+        "which codex") printf '%s\\n' '#{codex}' ;;
+        "which claude") printf '%s\\n' '#{claude}' ;;
+        *) exit 2 ;;
+      esac
+      """
     )
 
     original_path = System.get_env("PATH")

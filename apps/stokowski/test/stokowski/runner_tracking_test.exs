@@ -7,46 +7,32 @@ defmodule Stokowski.RunnerTrackingTest do
   @fixtures Path.expand("../fixtures", __DIR__)
 
   test "Codex fresh argv uses unified effort and unrestricted execution explicitly" do
-    assert {:ok, args} =
-             Codex.argv("/tmp/work", "review", model: "test-model", effort: "max")
+    fixture = yaml_fixture("runners/codex.yaml")
+    effort = List.last(fixture["valid_effort"])
 
-    assert args == [
-             "exec",
-             "--dangerously-bypass-approvals-and-sandbox",
-             "--json",
-             "--cd",
-             "/tmp/work",
-             "--model",
-             "test-model",
-             "--config",
-             ~s(model_reasoning_effort="max"),
-             "review"
-           ]
+    assert {:ok, args} =
+             Codex.argv("/tmp/work", "review", model: "test-model", effort: effort)
+
+    assert fixture["stdin"] == "closed"
+    assert fixture["workflow_key"] == "effort"
+    assert substitute(fixture["fresh_argv"]) == ["codex" | args]
 
     assert {:error, {:unsupported_effort, "extreme"}} =
              Codex.argv("/tmp/work", "review", effort: "extreme")
   end
 
   test "Codex resume argv carries the opaque native session reference" do
+    fixture = yaml_fixture("runners/codex.yaml")
+
     assert {:ok, args} =
              Codex.argv("/tmp/work", "implement",
-               model: "gpt-5.6-luna",
+               model: "test-model",
                effort: "max",
                session_id: "thread-fixture"
              )
 
-    assert args == [
-             "exec",
-             "resume",
-             "--dangerously-bypass-approvals-and-sandbox",
-             "--json",
-             "--model",
-             "gpt-5.6-luna",
-             "--config",
-             ~s(model_reasoning_effort="max"),
-             "thread-fixture",
-             "implement"
-           ]
+    assert fixture["session"]["native_resume_with_reference"]
+    assert substitute(fixture["resume_argv"], "implement") == ["codex" | args]
   end
 
   test "Codex JSONL is normalized without treating arbitrary lines as final messages" do
@@ -78,14 +64,19 @@ defmodule Stokowski.RunnerTrackingTest do
   end
 
   test "latest tracking marker uses validated timestamps rather than response order" do
-    assert {:ok, tracking_fixture} =
-             YamlElixir.read_from_file(Path.join(@fixtures, "tracking/comments.yaml"))
+    tracking_fixture = yaml_fixture("tracking/comments.yaml")
 
-    assert length(tracking_fixture["comments"]) == 3
+    comments =
+      Enum.map(tracking_fixture["comments"], fn comment ->
+        %{"body" => comment["body"], "createdAt" => comment["created_at"]}
+      end)
 
-    comments = Jason.decode!(File.read!(Path.join(@fixtures, "tracking/comments.json")))
     assert {:ok, latest} = Tracking.latest(comments, "state")
-    assert latest.payload["state"] == "implement"
+    assert latest.payload["state"] == "review"
+    assert {:ok, legacy} = Tracking.latest(Enum.take(comments, 1), "state")
+    assert legacy.payload["state"] == "implement"
+    assert {:ok, gate} = Tracking.latest(comments, "gate")
+    assert gate.payload["status"] == "waiting"
   end
 
   test "tracking ignores markers without a valid embedded timestamp" do
@@ -110,20 +101,43 @@ defmodule Stokowski.RunnerTrackingTest do
   end
 
   test "child environment excludes ambient secrets and overlays declared values" do
-    parent = %{
-      "PATH" => "/bin",
-      "SSH_AUTH_SOCK" => "/tmp/agent.sock",
-      "LINEAR_API_KEY" => "ambient-secret",
-      "UNRELATED" => "drop"
+    fixture = yaml_fixture("runners/environment.yaml")
+    inherit = fixture["inherit"]
+    project_allowlist = fixture["project_allowlist"]
+
+    parent =
+      Map.new(inherit, &{&1, "inherited"})
+      |> Map.merge(%{
+        "PATH" => "/bin",
+        "SSH_AUTH_SOCK" => "/tmp/agent.sock",
+        "LINEAR_API_KEY" => "ambient-secret",
+        "UNRELATED" => "drop"
+      })
+
+    declared =
+      Map.new(project_allowlist, &{&1, "declared"})
+      |> Map.put("PROJECT", "fantasia")
+
+    expected =
+      Map.take(parent, inherit)
+      |> Map.merge(Map.new(project_allowlist, &{&1, "declared"}))
+
+    assert Environment.child(parent, declared) == expected
+    assert fixture["declared_overrides_inherited"]
+    assert fixture["ambient_secrets"] == "redact"
+  end
+
+  defp yaml_fixture(name),
+    do: YamlElixir.read_from_file(Path.join(@fixtures, name)) |> elem(1)
+
+  defp substitute(values, prompt \\ "review") do
+    replacements = %{
+      "WORKSPACE" => "/tmp/work",
+      "PROMPT" => prompt,
+      "SESSION_ID" => "thread-fixture",
+      "MODEL" => "test-model"
     }
 
-    declared = %{"LINEAR_API_KEY" => "$LINEAR_API_KEY", "PROJECT" => "fantasia"}
-
-    assert Environment.child(parent, declared) == %{
-             "PATH" => "/bin",
-             "SSH_AUTH_SOCK" => "/tmp/agent.sock",
-             "LINEAR_API_KEY" => "$LINEAR_API_KEY",
-             "PROJECT" => "fantasia"
-           }
+    Enum.map(values, &Map.get(replacements, &1, &1))
   end
 end

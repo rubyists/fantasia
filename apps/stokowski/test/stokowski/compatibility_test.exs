@@ -19,7 +19,7 @@ defmodule Stokowski.CompatibilityTest do
            end)
 
     assert Enum.any?(rows, fn row ->
-             row["id"] == "linear-assignee" and row["disposition"] == "preserve"
+             row["id"] == "linear-assignee" and row["disposition"] == "defer"
            end)
 
     Enum.each(rows, fn row ->
@@ -43,6 +43,53 @@ defmodule Stokowski.CompatibilityTest do
 
     assert {:error, {:missing_fixture, "missing"}} =
              Compatibility.validate(ledger, tmp_dir)
+  end
+
+  @tag :tmp_dir
+  test "rejects an empty or non-list ledger", %{tmp_dir: tmp_dir} do
+    ledger = Path.join(tmp_dir, "ledger.yaml")
+
+    File.write!(ledger, "[]\n")
+    assert {:error, :ledger_must_not_be_empty} = Compatibility.validate(ledger, tmp_dir)
+
+    File.write!(ledger, "{}\n")
+    assert {:error, :ledger_must_be_a_list} = Compatibility.validate(ledger, tmp_dir)
+  end
+
+  @tag :tmp_dir
+  test "reports an unavailable vendored source revision by row identifier", %{tmp_dir: tmp_dir} do
+    File.write!(Path.join(tmp_dir, "fixture.yaml"), "fixture")
+    File.write!(Path.join(tmp_dir, "decision.adoc"), "decision")
+
+    File.write!(Path.join(tmp_dir, "ledger.yaml"), """
+    - id: missing-source
+      source: vendor/stokowski@deadbeef
+      fixture: fixture.yaml
+      input: input
+      output: output
+      disposition: preserve
+      adr: decision.adoc
+    """)
+
+    assert {:error, {:missing_source, "missing-source"}} =
+             Compatibility.validate(Path.join(tmp_dir, "ledger.yaml"), tmp_dir)
+  end
+
+  test "captures the deferred prompt context fixture" do
+    fixture = Path.expand("../fixtures/prompts/context.yaml", __DIR__)
+    assert {:ok, context} = YamlElixir.read_from_file(fixture)
+    assert context["issue"]["identifier"] == "EXT-57"
+    assert context["is_rework"]
+    assert context["review_comments"] == ["Keep Codex current."]
+  end
+
+  test "captures deferred Linear response edge cases" do
+    fixture = Path.expand("../fixtures/linear/responses.yaml", __DIR__)
+    assert {:ok, responses} = YamlElixir.read_from_file(fixture)
+    assert responses["assignee"] == "me"
+    assert Enum.at(responses["pages"], 0)["nodes"] |> Enum.at(1) == nil
+    assert Enum.at(responses["pages"], 1)["nodes"] == "malformed"
+    assert Enum.at(responses["pages"], 1)["errors"] == [%{"message" => "partial fixture error"}]
   end
 
   @tag :tmp_dir

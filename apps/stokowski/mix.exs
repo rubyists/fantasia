@@ -13,7 +13,11 @@ defmodule Stokowski.MixProject do
       lockfile: "../../mix.lock",
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
-      escript: [main_module: Stokowski.CLI, name: "fantasia", path: "../../fantasia"],
+      escript: [
+        main_module: Stokowski.CLI,
+        name: "fantasia",
+        path: System.get_env("FANTASIA_ESCRIPT_PATH", "../../fantasia")
+      ],
       deps: deps()
     ]
   end

@@ -45,7 +45,7 @@ defmodule Stokowski.WorkflowTest do
     assert {:error, %YamlElixir.ParsingError{}} = Workflow.read(path)
   end
 
-  test "normalizes the full workflow fixture with string keys" do
+  test "normalizes the full workflow fixture including a flow merge sequence" do
     path = fixture("config/full-workflow.yaml")
 
     assert {:ok, workflow} = Workflow.read(path)
@@ -53,6 +53,8 @@ defmodule Stokowski.WorkflowTest do
     assert normalized["states"]["investigate"]["runner"] == "codex"
     assert normalized["states"]["investigate"]["session"] == "fresh"
     assert normalized["state"]["effort"] == "high"
+    assert normalized["state"]["runner"] == "codex"
+    assert normalized["state"]["session"] == "fresh"
     refute Map.has_key?(normalized["state"], "reasoning_effort")
     assert normalized["flags"] == [true, false, nil, 7, 2.5]
     assert byte_size(Workflow.fingerprint(normalized)) == 64
@@ -95,6 +97,29 @@ defmodule Stokowski.WorkflowTest do
     assert normalized["mapping"] == %{}
     assert normalized["sequence"] == []
     assert normalized["nested"] == [%{}, []]
+  end
+
+  @tag :tmp_dir
+  test "reports unsupported flow-style mapping aliases explicitly", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "flow-mapping-alias.yaml")
+    File.cp!(fixture("config/flow-mapping-alias.yaml"), path)
+
+    assert {:ok, workflow} = Workflow.read(path)
+    assert {:error, {:invalid_merge, :flow_mapping_alias}} = Workflow.normalize(workflow)
+  end
+
+  @tag :tmp_dir
+  test "returns an empty-document error for an empty YAML file", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "empty.yaml")
+    File.write!(path, "")
+
+    assert {:ok, workflow} = Workflow.read(path)
+    assert {:error, :empty_document} = Workflow.normalize(workflow)
+  end
+
+  @tag :tmp_dir
+  test "returns the file error when the workflow is missing", %{tmp_dir: tmp_dir} do
+    assert {:error, :enoent} = Workflow.read(Path.join(tmp_dir, "missing.yaml"))
   end
 
   defp fixture(name), do: Path.expand("../fixtures/#{name}", __DIR__)

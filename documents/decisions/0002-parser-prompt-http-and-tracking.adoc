@@ -15,7 +15,11 @@ those adapters.
 YamlElixir/yamerl remains the parser. Fantasia parses maps as keyword entries to retain duplicates,
 then normalizes exactly one document to string-keyed immutable data. Duplicate keys and multiple
 documents are errors; secrets are never included in parse diagnostics. The full-workflow fixture
-pins anchors, merges, scalar types, sequences, and multiline values.
+pins anchors, merge sequences, scalar types, sequences, and multiline values. Merge sequences follow
+the YAML rule that an earlier mapping wins on a duplicate key. The current yamerl release cannot
+reconstruct a flow-style mapping used as a merge alias; Fantasia reports that boundary explicitly as
+`{:invalid_merge, :flow_mapping_alias}` and defers broader flow-alias support to a parser decision
+before Phase 1 expands the workflow syntax.
 
 The prompt contract is nested `issue.*` data and real `is_rework` state. The Phase 0 fixture captures
 that canonical context shape and review comments, but does not claim to test rendering. Engine

@@ -8,6 +8,15 @@ defmodule Stokowski.ProcessLifecycleTest do
     python = System.find_executable("python3") || System.find_executable("python")
     script = Path.expand("../support/stubborn_process_tree.py", __DIR__)
     pid_file = Path.join(tmp_dir, "pids")
+    leader_file = "#{pid_file}.leader"
+
+    assert {:ok, fixture} =
+             YamlElixir.read_from_file(
+               Path.expand("../fixtures/runners/process-lifecycle.yaml", __DIR__)
+             )
+
+    assert fixture["platforms"] != []
+    [term_signal, _grace, kill_signal] = fixture["termination"]
 
     port =
       Port.open({:spawn_executable, python}, [
@@ -16,26 +25,24 @@ defmodule Stokowski.ProcessLifecycleTest do
         args: [script, "parent", pid_file]
       ])
 
+    port_pid = Port.info(port)[:os_pid]
+
     on_exit(fn ->
-      case read_pids(pid_file) do
-        [group_leader | _] = cleanup_pids ->
-          if Enum.any?(cleanup_pids, &alive?/1), do: group_signal("KILL", group_leader)
+      cleanup_pids = read_pids(pid_file)
+      cleanup_leader = List.first(cleanup_pids) || read_pid(leader_file) || port_pid
+      if is_integer(cleanup_leader), do: group_signal(kill_signal, cleanup_leader)
 
-        [] ->
-          :ok
-      end
-
-      if Port.info(port), do: Port.close(port)
+      if is_list(Port.info(port)), do: Port.close(port)
     end)
 
     pids = await_pids(pid_file)
-    [group_leader | _] = pids
+    [session_leader | _] = pids
 
-    assert {_, 0} = group_signal("TERM", group_leader)
+    assert {_, 0} = group_signal(term_signal, session_leader)
     Process.sleep(50)
     assert Enum.all?(pids, &alive?/1)
 
-    assert {_, 0} = group_signal("KILL", group_leader)
+    assert {_, 0} = group_signal(kill_signal, session_leader)
     assert eventually(fn -> Enum.all?(pids, &(not alive?(&1))) end, @cleanup_timeout)
     assert_receive {^port, {:exit_status, _status}}, @cleanup_timeout
   end
@@ -68,6 +75,13 @@ defmodule Stokowski.ProcessLifecycleTest do
 
       {:error, _reason} ->
         []
+    end
+  end
+
+  defp read_pid(path) do
+    case read_pids(path) do
+      [pid | _] -> pid
+      [] -> nil
     end
   end
 

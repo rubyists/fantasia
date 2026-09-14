@@ -7,30 +7,33 @@ defmodule Stokowski.Workflow do
   """
 
   @enforce_keys [:documents]
-  defstruct [:documents]
+  defstruct [:documents, unsupported_flow_mapping_aliases: []]
 
   @opaque t :: %__MODULE__{documents: [term()]}
 
-  @spec read(Path.t()) :: {:ok, t()} | {:error, Exception.t()}
+  @spec read(Path.t()) :: {:ok, t()} | {:error, term()}
   def read(path) do
     with {:ok, yaml} <- File.read(path),
-         {:ok, _documents} <- YamlElixir.read_all_from_string(yaml, maps_as_keywords: true) do
-      documents =
-        yaml
-        |> :yamerl_constr.string(
-          detailed_constr: true,
-          str_node_as_binary: true,
-          keep_duplicate_keys: true
-        )
-        |> Enum.map(fn {:yamerl_doc, document} -> preserve_shape(document) end)
+         {:ok, _documents} <- YamlElixir.read_all_from_string(yaml, maps_as_keywords: true),
+         {:ok, documents} <- parse_documents(yaml) do
+      unsupported_flow_mapping_aliases = find_flow_mapping_aliases(yaml)
 
-      {:ok, %__MODULE__{documents: documents}}
+      {:ok,
+       %__MODULE__{
+         documents: documents,
+         unsupported_flow_mapping_aliases: unsupported_flow_mapping_aliases
+       }}
     end
   end
 
   @spec api_key_values(t()) :: [term()]
   def api_key_values(%__MODULE__{documents: documents}) do
     find_api_key_values(documents)
+  end
+
+  @spec runner_values(t()) :: [String.t()]
+  def runner_values(%__MODULE__{documents: documents}) do
+    find_runner_values(documents)
   end
 
   @doc """
@@ -42,11 +45,35 @@ defmodule Stokowski.Workflow do
   @spec normalize(t()) ::
           {:ok, map()}
           | {:error,
-             :multiple_documents
+             :empty_document
+             | :multiple_documents
              | {:duplicate_key, binary()}
              | {:invalid_key, term()}
-             | {:invalid_merge, :mapping_required}}
-  def normalize(%__MODULE__{documents: [document]}), do: normalize_value(document)
+             | {:invalid_merge, :mapping_required | :flow_mapping_alias}}
+
+  def normalize(%__MODULE__{
+        documents: [document],
+        unsupported_flow_mapping_aliases: unsupported_flow_mapping_aliases
+      }) do
+    case normalize_value(document) do
+      {:ok, normalized} when unsupported_flow_mapping_aliases == [] ->
+        {:ok, normalized}
+
+      {:ok, _normalized} ->
+        {:error, {:invalid_merge, :flow_mapping_alias}}
+
+      {:error, {:duplicate_key, _key}} = error ->
+        error
+
+      {:error, _reason} when unsupported_flow_mapping_aliases != [] ->
+        {:error, {:invalid_merge, :flow_mapping_alias}}
+
+      {:error, _reason} = error ->
+        error
+    end
+  end
+
+  def normalize(%__MODULE__{documents: []}), do: {:error, :empty_document}
   def normalize(%__MODULE__{}), do: {:error, :multiple_documents}
 
   @spec fingerprint(map()) :: binary()
@@ -68,6 +95,18 @@ defmodule Stokowski.Workflow do
     do: Enum.flat_map(entries, &find_api_key_values/1)
 
   defp find_api_key_values(_value), do: []
+
+  defp find_runner_values({:mapping, entries}) do
+    Enum.flat_map(entries, fn
+      {"runner", value} when is_binary(value) -> [value | find_runner_values(value)]
+      {_key, value} -> find_runner_values(value)
+    end)
+  end
+
+  defp find_runner_values(entries) when is_list(entries),
+    do: Enum.flat_map(entries, &find_runner_values/1)
+
+  defp find_runner_values(_value), do: []
 
   defp normalize_value({:mapping, entries}), do: normalize_mapping(entries)
   defp normalize_value(values) when is_list(values), do: normalize_sequence(values)
@@ -113,15 +152,35 @@ defmodule Stokowski.Workflow do
 
   defp normalize_merges(entries) do
     Enum.reduce_while(entries, {:ok, %{}}, fn {_key, value}, {:ok, result} ->
-      case normalize_value(value) do
-        {:ok, normalized} when is_map(normalized) ->
-          {:cont, {:ok, Map.merge(result, normalized)}}
-
-        {:ok, _normalized} ->
-          {:halt, {:error, {:invalid_merge, :mapping_required}}}
+      case normalize_merge_value(value) do
+        {:ok, normalized} ->
+          # YAML merge sequences are ordered: an earlier mapping wins.
+          {:cont, {:ok, Map.merge(normalized, result)}}
 
         {:error, _reason} = error ->
           {:halt, error}
+      end
+    end)
+  end
+
+  defp normalize_merge_value(value) do
+    case normalize_value(value) do
+      {:ok, normalized} when is_map(normalized) -> {:ok, normalized}
+      {:ok, normalized} when is_list(normalized) -> normalize_merge_sequence(normalized)
+      {:ok, _normalized} -> {:error, {:invalid_merge, :mapping_required}}
+      {:error, _reason} = error -> error
+    end
+  end
+
+  defp normalize_merge_sequence(values) do
+    Enum.reduce_while(values, {:ok, %{}}, fn value, {:ok, result} ->
+      case value do
+        normalized when is_map(normalized) ->
+          # Keep keys from the first mapping when later mappings overlap.
+          {:cont, {:ok, Map.merge(normalized, result)}}
+
+        _value ->
+          {:halt, {:error, {:invalid_merge, :mapping_required}}}
       end
     end)
   end
@@ -145,6 +204,43 @@ defmodule Stokowski.Workflow do
     |> then(fn
       {:ok, result} -> {:ok, Enum.reverse(result)}
       error -> error
+    end)
+  end
+
+  defp parse_documents(yaml) do
+    # YamlElixir is the public error guard; raw yamerl is required below to
+    # retain duplicate keys and empty-container shape for normalization. Keep
+    # the second parse protected so read/1 preserves its tuple contract if the
+    # two parser passes ever disagree about an input.
+    try do
+      documents =
+        yaml
+        |> :yamerl_constr.string(
+          detailed_constr: true,
+          str_node_as_binary: true,
+          keep_duplicate_keys: true
+        )
+        |> Enum.map(fn {:yamerl_doc, document} -> preserve_shape(document) end)
+
+      {:ok, documents}
+    rescue
+      exception -> {:error, exception}
+    catch
+      kind, reason -> {:error, {kind, reason}}
+    end
+  end
+
+  defp find_flow_mapping_aliases(yaml) do
+    flow_anchors = Regex.scan(~r/&([A-Za-z0-9_-]+)\s*\{/, yaml, capture: :all_but_first)
+
+    Enum.flat_map(flow_anchors, fn [name] ->
+      alias = Regex.escape(name)
+
+      if Regex.match?(~r/<<\s*:\s*(?:\*\s*#{alias}\b|\[[^\]]*\*\s*#{alias}\b)/s, yaml) do
+        [name]
+      else
+        []
+      end
     end)
   end
 

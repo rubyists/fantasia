@@ -15,17 +15,15 @@ defmodule Stokowski.Phase0FlowTest do
   end
 
   test "replay uses the journaled normalized graph after source input changes" do
-    input = %{
-      "fingerprint" => "original",
-      "states" => [%{"name" => "investigate"}, %{"name" => "implement"}]
-    }
+    fixture = Path.expand("../fixtures/config/normalized-flow.yaml", __DIR__)
+    assert {:ok, input} = YamlElixir.read_from_file(fixture)
 
     assert {:ok, run_id} = ContinuumTest.start_synchronous(Phase0Flow, input)
 
     assert {:ok, %{state: :completed, result: {:ok, result}}} =
              Continuum.await(run_id, 1_000)
 
-    assert result == %{fingerprint: "original", states: ["investigate", "implement"]}
+    assert result == %{fingerprint: "sha256:fixture", states: ["investigate", "done"]}
     history = ContinuumTest.history(run_id)
     assert [%{type: :side_effect, payload: ^input}] = history
 

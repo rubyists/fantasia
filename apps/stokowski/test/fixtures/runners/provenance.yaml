@@ -3,3 +3,9 @@ version: 0.154.0
 resolution: mise which codex
 verify: codex --version
 reject_drift: true
+claude:
+  package: anthropics/claude-code
+  version: 2.1.270
+  resolution: mise which claude
+  verify: claude --version
+  reject_drift: true

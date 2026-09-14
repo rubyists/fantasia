@@ -4,6 +4,7 @@ defmodule Stokowski.CLITest do
   import ExUnit.CaptureIO
 
   test "reports the canonical version" do
-    assert capture_io(fn -> Stokowski.CLI.main(["version"]) end) == "fantasia 0.1.0\n"
+    expected = "../../../../.version.txt" |> Path.expand(__DIR__) |> File.read!() |> String.trim()
+    assert capture_io(fn -> Stokowski.CLI.main(["version"]) end) == "fantasia #{expected}\n"
   end
 end

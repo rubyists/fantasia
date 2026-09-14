@@ -17,7 +17,7 @@
   fixture: apps/stokowski/test/fixtures/prompts/context.yaml
   input: nested issue context, true rework state, and review comments
   output: canonical context shape is captured for the deferred prompt engine
-  disposition: correct
+  disposition: defer
   adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
 - id: tracking-order
   source: vendor/stokowski@b80db05
@@ -44,6 +44,13 @@
   source: codex-cli@0.154.0
   fixture: apps/stokowski/test/fixtures/runners/provenance.yaml
   input: inherited PATH shadows the repository-managed executable
+  output: exact mise path and observed version match the repository pin
+  disposition: correct
+  adr: documents/decisions/0001-phase-0-compatibility-and-provenance.adoc
+- id: claude-tool-resolution
+  source: vendor/stokowski@79fa1bb
+  fixture: apps/stokowski/test/fixtures/runners/provenance.yaml
+  input: configured Claude runner requires a repository-managed executable
   output: exact mise path and observed version match the repository pin
   disposition: correct
   adr: documents/decisions/0001-phase-0-compatibility-and-provenance.adoc
@@ -79,8 +86,8 @@
   source: vendor/stokowski@b80db05
   fixture: apps/stokowski/test/fixtures/linear/responses.yaml
   input: assignee me with paginated partial and malformed nodes
-  output: authenticated-user scoped admission and safe malformed-node rejection
-  disposition: preserve
+  output: legacy pagination, assignee, partial-error, and malformed-node shapes captured for the deferred tracker adapter
+  disposition: defer
   adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
 - id: lc-priority-metadata
   source: vendor/linear-cli@1cc36ffe0a0d728b36d8c5914f114ae9e99751d8
@@ -110,3 +117,10 @@
   output: checkout-independent BEAM escript prints the canonical application version
   disposition: correct
   adr: documents/decisions/0005-distribution-and-release.adoc
+- id: yaml-flow-mapping-alias
+  source: vendor/stokowski@26c3cff
+  fixture: apps/stokowski/test/fixtures/config/flow-mapping-alias.yaml
+  input: YAML merge alias targeting a flow-style mapping anchor
+  output: explicit parser-boundary error while flow-mapping alias support is deferred
+  disposition: defer
+  adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
