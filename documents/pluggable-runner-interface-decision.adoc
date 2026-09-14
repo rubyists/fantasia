@@ -1,0 +1,363 @@
+= Pluggable runner interface
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 14, 2026
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:status: Accepted
+:status_comment: Accepted by Fantasia maintainers on Sep 14, 2026
+:toc:
+
+== Status
+
+{status}:: {status_comment}
+
+This decision supersedes fixed-runner assumptions in
+link:initial-plan.adoc[the initial Elixir port plan]. Claude Code and Codex are
+the initial built-in adapters, not a closed set of runners.
+
+== Context
+
+Fantasia exists to coordinate deterministic, multi-stage work across coding
+agents. Different agents can investigate, implement, and review the same work,
+which reduces the risk that one provider's assumptions survive every stage.
+The workflow engine therefore gains value from runner diversity independently
+of any particular runner implementation.
+
+https://github.com/Sugar-Coffee/stokowski/issues/18[Stokowski issue 18]
+proposes a pluggable runner interface after exercising Stokowski's adversarial
+review pipeline with real work. It identifies Pi, Hermes, OpenCode, and future
+coding-agent CLIs as possible adapters. In
+https://github.com/Sugar-Coffee/stokowski/issues/18#issuecomment-4383908242[a
+follow-up comment], the Stokowski maintainer confirmed that a provider interface
+is on that project's roadmap.
+
+The initial Fantasia plan names only Claude Code and Codex in its goals,
+validation rules, acceptance tests, and definition of done. It also lists
+adding other production runners as a non-goal for the initial compatibility
+release. Read literally, those statements permit an implementation built from
+runner-name conditionals and a fixed two-value enum. Such an implementation
+could satisfy compatibility and still make the third runner expensive to add.
+
+The pre-phase plan already reserves a better boundary: runners and models are
+separate extension points; runners expose capabilities and normalized events;
+provider-native sessions remain opaque; and external executables may eventually
+speak a public Fantasia protocol. This decision promotes that boundary from a
+future consideration to a primary design constraint of the Elixir port.
+
+The Elixir implementation is still early enough to establish the boundary
+before orchestration, persistence, observability, and the two initial adapters
+grow around hard-coded runner distinctions.
+
+== Decision
+
+=== Primary invariant
+
+Fantasia is runner-pluggable by design.
+
+Adding an in-tree runner must require only:
+
+* one adapter implementation;
+* one registry entry; and
+* adapter-specific fixtures run through the shared runner conformance suite.
+
+It must not require changes to the workflow engine, phase machine, admission
+controller, session manager, command supervisor, workspace manager, recovery,
+projections, dashboard, or generic configuration validator.
+
+Claude and Codex must use the same registration, dispatch, lifecycle, event,
+and result paths available to every other runner. They are default built-ins,
+not special branches in the orchestration engine.
+
+This invariant is part of Fantasia 0.1.0's definition of done. Shipping
+production Pi, Hermes, OpenCode, or other adapters remains outside the initial
+compatibility scope; proving that one can be added without changing the core
+does not.
+
+=== Layered runtime boundary
+
+Keep runner protocol translation separate from process policy.
+
+[source,text]
+----
+                       deterministic workflow engine
+                                   |
+                         normalized runner request
+                                   |
+                        Stokowski.Runner.Registry
+                                   |
+                 +-----------------+-----------------+
+                 |                 |                 |
+          Claude adapter     Codex adapter      another adapter
+                 |                 |                 |
+                 +-----------------+-----------------+
+                                   |
+                         Stokowski.Command
+                    ports, bounds, timeout, kill
+----
+
++Stokowski.Runner+ is the adapter behavior and normalized contract. A runner
+adapter owns:
+
+* stable adapter identity and protocol version;
+* capability reporting;
+* validation of its namespaced configuration;
+* translation from a normalized request to its provider protocol;
+* decoding provider output into normalized events and a terminal result; and
+* extraction and restoration of opaque native session references when
+  supported.
+
++Stokowski.Command+ owns common execution policy for process-backed adapters:
+
+* direct executable launch without an intermediate shell;
+* filtered environment construction and redaction;
+* concurrent, bounded stdout and stderr draining;
+* turn and stall timers;
+* graceful interruption when supported;
+* bounded process-tree termination and kill; and
+* child ownership across supervisor restart and application shutdown.
+
+An adapter must not reimplement that policy merely because its arguments or
+output format differ. Non-process adapters may use another transport driver,
+but must expose the same request, event, result, cancellation, and diagnostic
+semantics.
+
+Fantasia's workspace manager remains the sole owner of issue workspaces.
+Runner-specific worktree features are not part of the generic runner contract
+and must not create a second, competing workspace lifecycle.
+
+=== Normalized contract
+
+The workflow engine supplies a runner request containing only shared domain
+values:
+
+* stable project, issue, phase, run, and attempt identity;
+* rendered prompt;
+* workspace path;
+* selected model and runner-specific options;
+* filtered environment;
+* permission and tool policy;
+* turn and stall deadlines;
+* session policy;
+* an optional opaque native session reference for the selected adapter; and
+* bounded portable handoff context.
+
+Adapters emit the provider-neutral event vocabulary established by the
+pre-phase plan: session and turn start, visible message updates, operation
+updates, approval requests, usage updates, warnings, and terminal completion.
+Providers without fine-grained events may emit only the events they can support.
+The core must not fabricate tool activity, usage, or native sessions.
+
+The terminal result records status, provider exit or error information, opaque
+session reference when available, public final output, optional usage, timing,
+and bounded redacted diagnostics. Workflow transitions depend only on this
+normalized result and declared graph edges, never on provider text or native
+event shapes.
+
+=== Registry and configuration
+
+Runner names in workflow phases resolve through a registry captured in the
+validated workflow snapshot. Generic validation asks the registry to resolve a
+name and delegates namespaced option validation to that adapter. It must not
+validate runner names against a hard-coded +claude | codex+ enumeration.
+
+Existing workflows remain valid. When no explicit registry configuration is
+present, Fantasia synthesizes the built-in +claude+ and +codex+ registrations.
+A future explicit form may add configured instances without changing phase
+syntax:
+
+[source,yaml]
+----
+runners:
+  claude:
+    adapter: claude
+  codex:
+    adapter: codex
+  pi-local:
+    adapter: pi
+    command: pi
+    options:
+      mode: json
+
+states:
+  investigate:
+    runner: pi-local
+----
+
+The registry name is an operator-selected instance name. The adapter kind is
+the implementation identity. This permits two differently configured instances
+of one adapter without pretending they are different implementations.
+
+Runner-specific settings live under that registration's +options+ mapping and
+are interpreted only by its adapter. Shared phase policy such as prompt,
+workspace, deadlines, session mode, model selection, and effort remains in the
+normalized request rather than being copied into every adapter schema.
+
+Hot reload may replace a registration only at a deterministic workflow
+boundary. A persisted native session reference records the registration name,
+adapter kind, adapter/protocol version, project and workspace identity, and the
+opaque provider value so it cannot be resumed by the wrong adapter or issue.
+
+=== Capabilities and graceful degradation
+
+Every adapter reports capabilities. The initial vocabulary includes:
+
+* +streaming+;
+* +native_resume+;
+* +model_selection+;
+* +effort+;
+* +usage+;
+* +tool_events+;
+* +approvals+;
+* +steer+; and
+* +graceful_interrupt+.
+
+Accepting a prompt and producing a terminal result is the minimum useful
+runner contract. JSON output, native resume, token usage, and tool-level events
+are enhancements, not prerequisites for registration.
+
+Workflow validation rejects a capability only when the workflow explicitly
+requires it. Otherwise the runtime applies a documented normalized fallback:
+
+* without +streaming+, emit turn start and terminal completion around bounded
+  final output;
+* without +native_resume+, +session: inherit+ starts a new native invocation
+  with the bounded portable handoff and records a warning;
+* an explicitly configured model or effort is rejected when its capability is
+  unsupported rather than being silently ignored;
+* +session: handoff+ always starts a new native invocation with the portable
+  handoff;
+* +session: fresh+ starts with neither a native session nor prior handoff;
+* without +usage+, report usage as unavailable rather than zero;
+* without +tool_events+, expose no invented operation timeline; and
+* without +graceful_interrupt+, the command owner still performs bounded
+  process-tree termination.
+
+An explicit capability requirement is available for workflows that prefer to
+fail validation rather than degrade. Fallback decisions are observable in logs,
+events, run reports, and the dashboard.
+
+=== Extension paths
+
+The in-repository extension point is an Elixir behavior plus registry entry.
+The runner conformance suite is public test support so an adapter author can
+verify the contract without a paid model, tracker account, or live network.
+
+The external extension path remains a versioned newline-delimited stdio
+protocol and manifest. An external adapter host maps that protocol onto the
+same normalized request and event types. This eventually permits a separately
+distributed runner to be registered without recompiling Fantasia.
+
+The external protocol is not required for the first compatibility release,
+but the normalized types and registry must not assume that every adapter is a
+statically named built-in module. Dynamic BEAM loading and automatic discovery
+of arbitrary executables are not part of this decision.
+
+=== Separate model extension point
+
+Runner and model remain separate concepts. Claude Code, Codex, Pi, and Hermes
+own agent loops and tool execution. Ollama and OpenAI-compatible endpoints may
+provide only inference to a future Fantasia-native agent loop.
+
+Runner registration must not turn model providers into fake coding-agent CLIs,
+and model selection must not require a distinct runner adapter for every model.
+The +Stokowski.Model+ behavior reserved by the pre-phase plan remains a separate
+extension point.
+
+== Acceptance evidence
+
+Before the first production runner adapters merge, tests must establish the
+contract with fake adapters and fake executables.
+
+The acceptance suite must prove:
+
+* the same synthetic phase executes through Claude, Codex, and a third fake
+  adapter using the same dispatcher;
+* a mixed three-runner graph completes without runner-name branching in the
+  phase engine;
+* a text-only, non-streaming fake produces a valid coarse event sequence;
+* a JSONL fake handles partial chunks, malformed events, bounded diagnostics,
+  and independent stdout/stderr traffic;
+* native session references are namespaced and cannot cross runner, adapter,
+  project, issue, or workspace boundaries;
+* +inherit+, +handoff+, and +fresh+ behave consistently with and without native
+  resume capability;
+* unsupported optional usage and tool events remain unavailable rather than
+  being fabricated;
+* adapter configuration errors are reported by generic validation with the
+  registration and adapter identified;
+* timeout, stall, cancellation, supervisor restart, and application shutdown
+  leave no runner or descendant process behind;
+* secrets and disallowed environment values do not appear in argv, events,
+  diagnostics, logs, reports, or dashboard projections; and
+* adding the third fake touches no core module outside its registry fixture.
+
+Built-in adapters must run this shared conformance suite in addition to their
+provider-protocol fixtures. Optional live smoke tests remain separate from CI.
+
+== Consequences
+
+Fantasia pays the abstraction cost before its first two production adapters
+make their incidental differences part of the orchestration design. The runner
+request, event, capability, result, and session types become stable internal
+contracts that require versioning discipline.
+
+In return:
+
+* a new coding-agent CLI is localized to one adapter;
+* simple text-only agents are useful without pretending to support richer
+  telemetry;
+* provider protocol churn does not alter phase semantics;
+* dashboards and reports work from normalized events;
+* session and cancellation behavior stays consistent across adapters;
+* fake runners make the orchestration suite deterministic and free; and
+* the future external protocol has a proven internal model to expose.
+
+The number of production adapters remains intentionally small until each one
+has protocol fixtures and passes the conformance suite. Pluggability is not a
+promise that every executable is safe or supportable.
+
+== Rejected alternatives
+
+=== Fixed runner enumeration and dispatcher branches
+
+A +claude | codex+ enum is sufficient for compatibility but makes every new
+runner a cross-cutting edit. It violates the primary invariant and is rejected.
+
+=== Only +build_args+ and +parse_output+ callbacks
+
+These callbacks are useful adapter mechanics but are not a complete contract.
+Alone they leave capability negotiation, sessions, cancellation, process-tree
+cleanup, diagnostics, redaction, and lifecycle ordering to convention or
+duplication. The normalized request/event/result contract and shared command
+owner are required.
+
+=== Require every runner to match Claude or Codex
+
+Requiring streaming JSON, native resume, tool events, and usage would exclude
+otherwise useful agents and encourage adapters to fabricate data. Optional
+capabilities with explicit fallbacks preserve truthful behavior.
+
+=== Let runners own worktrees and workspaces
+
+Fantasia already needs a single workspace lifecycle for hooks, Git isolation,
+recovery, evidence, and cleanup. Delegating it to some runners would create two
+authorities and runner-dependent phase semantics.
+
+=== Combine runner and model adapters
+
+Coding-agent runtimes and inference providers own different responsibilities.
+Combining them either leaks provider details into orchestration or forces model
+servers to imitate an agent runtime. The two extension points remain separate.
+
+=== Automatically load arbitrary plugins
+
+Automatic executable discovery or dynamic BEAM loading makes provenance,
+versioning, packaging, and trust unclear. Registrations are explicit; the
+future external protocol is versioned and opt-in.
