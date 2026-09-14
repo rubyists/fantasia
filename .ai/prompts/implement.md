@@ -35,10 +35,9 @@ necessary for release-please to pick up our squash merge commits to main.
    git checkout -b {{ issue.identifier | lower }}-<short-description>
    ```
 4. Implement the changes with clean, logical commits.
-5. Run the local quality gate (fast, no network required after deps are installed):
-   - mix precommit
-   For full CI-equivalent assurance before opening a PR (runs audits and
-   validation that require network access), use `mix ci` instead.
+5. Run the repository quality checks:
+   - `mise exec -- mix format --check-formatted`
+   - `mise exec -- mix test`
 6. Fix any failures before proceeding.
 7. Push the branch and create a PR:
    ```

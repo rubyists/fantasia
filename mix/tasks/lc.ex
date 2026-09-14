@@ -33,6 +33,7 @@ defmodule Mix.Tasks.Lc do
 
     opts = [
       cd: checkout,
+      # Port env entries extend the caller's environment; quiet only nested Mix output.
       env: [{"MIX_QUIET", "1"}],
       stdio: :inherit
     ]
@@ -58,7 +59,7 @@ defmodule Mix.Tasks.Lc do
       Port.open(
         {:spawn_executable, executable},
         [
-          # Leave the caller's streams attached so prompts and JSON output work.
+          # Use fd 3/4 for port control so the child keeps the caller's stdin/stdout.
           :nouse_stdio,
           :exit_status,
           args: args,

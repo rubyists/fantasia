@@ -1,0 +1,140 @@
+= Repository-management Mix task ownership
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 13, 2026
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:status: Accepted
+:status_comment: Accepted by Fantasia maintainers on Sep 13, 2026
+:toc:
+
+== Status
+
+{status}:: {status_comment}
+
+== Context
+
+Fantasia is an umbrella repository. Commands such as +mix lc+,
++mix submodules.update+, and +mix stokowski+ manage the repository and may
+operate on every runtime application under +apps/+. They therefore must not be
+owned by +apps/stokowski+ or by any future product application.
+
+Mix normally discovers tasks from compiled beam files on its code path. An
+experiment loaded task source files directly from the root +mix.exs+ so the
+commands could run before an umbrella child was compiled. The commands ran,
+but bare +mix help+ did not list them. Targeted help could find a command but
+could not render its module documentation or report a beam location. That is
+not an acceptable command-line interface.
+
+The repository already defines +mix setup+ as the required entry point for a
+fresh checkout, and new Stokowski workspaces run it in +after_create+. It is
+reasonable for setup or compilation to be the boundary after which the other
+repository commands become available. It is not reasonable for those commands
+to remain undiscoverable after that boundary.
+
+== Requirements
+
+* Bare +mix help+ lists every public repository-management task with its
+  short description after the documented setup step.
+* +mix help TASK+ renders the task's full documentation and its compiled beam
+  location.
+* A fresh checkout needs only +mise exec -- mix setup+ to prepare both the
+  umbrella and its repository tooling.
+* Runtime applications do not own repository-management source or tests.
+* Repository tooling uses the normal Mix compiler and test runner. The root
+  mixfile must not implement a second compiler, beam cache, or task registry.
+* The bootstrap path remains small and does not depend on a compiled custom
+  task before compilation has happened.
+
+== Proposed decision
+
+Create an umbrella child named +:repo_management+ at
++apps/repo_management+. Put all repository-wide Mix tasks and their tests in
+that application, including:
+
+* +mix lc+;
+* +mix linear.setup+;
+* +mix stokowski+ while it launches the vendored Python implementation; and
+* +mix submodules.update+.
+
+Keep the application dependency-free. Its tasks may orchestrate external
+programs and vendored checkouts, but must not depend on a runtime application.
+
+Do not load task source files from the root mixfile. Keep +mix setup+ as the
+single bootstrap exception because a root alias is available before umbrella
+children are compiled. Order it as follows:
+
+[source,elixir]
+----
+[setup: ["deps.get", "compile", "linear.setup"]]
+----
+
+The initial +compile+ makes the +:repo_management+ tasks available. The
+subsequent +linear.setup+ task fetches dependencies for the application in
++vendor/linear-cli+. The umbrella itself does not depend on that vendored
+application, so compiling before that fetch does not create a dependency
+cycle.
+
+After +mix clean+, operators must run +mix compile+ or +mix setup+ before using
+repository-management tasks. This is the ordinary lifecycle for tasks owned by
+an umbrella child and is part of this decision, not an accidental limitation.
+
+== Evidence
+
+An isolated clean umbrella verified the proposed bootstrap sequence:
+
+* before setup, the child task was not listed by +mix help+;
+* the root +setup+ alias ran +compile+ and then invoked +linear.setup+
+  successfully;
+* after setup, bare +mix help+ listed +mix linear.setup+ with its short
+  description; and
+* +mix help linear.setup+ rendered the full module documentation and reported
+  +_build/dev/lib/repo_management/ebin+ as its location.
+
+This proves the behavior at the Mix task-discovery boundary rather than
+inferring it from project structure.
+
+== Rejected alternatives
+
+=== Keep tasks in +apps/stokowski+
+
+This gives Mix normal compiled-task behavior, but makes a runtime application
+own commands that build and manage itself and its siblings. That ownership is
+wrong even if the mechanism works.
+
+=== Load +mix/tasks/*.ex+ from +mix.exs+
+
+This makes commands executable before compilation, but bypasses the beam-based
+discovery used by +mix help+. Executability without discoverability and useful
+help is insufficient.
+
+=== Compile or register root tasks from +mix.exs+
+
+Writing task beams, maintaining a private build path, or replacing Mix's help
+and task registry would create a second build mechanism solely to avoid one
+documented setup step. The additional state and maintenance cost are not
+justified.
+
+=== Install a Mix archive or separate global tool
+
+An archive could make tasks available before repository setup, but introduces
+installation state and version drift outside the checkout. Repository commands
+must follow the checked-out revision.
+
+== Consequences
+
+The repository gains one small umbrella application whose product is its Mix
+task surface. In return, task ownership, documentation, discovery, compilation,
+and testing all use standard Mix behavior. +apps/stokowski+ remains focused on
+the native Fantasia runtime that the temporary Python launcher is intended to
+help build.
+
+Revisit this decision if Mix adds first-class compiled root tasks for umbrella
+projects, or if repository commands must become available before the required
++mix setup+ step.

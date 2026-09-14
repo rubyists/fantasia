@@ -107,6 +107,7 @@ defmodule Mix.Tasks.Submodules.Update do
     end
 
     run_git!(git, ["-C", checkout, "fetch", "origin", branch], [], "fetch #{path}")
+    ensure_ancestor!(submodule, "HEAD", git)
 
     case git.(["-C", checkout, "show-ref", "--verify", "--quiet", "refs/heads/#{branch}"], []) do
       {_output, 0} ->
@@ -131,17 +132,9 @@ defmodule Mix.Tasks.Submodules.Update do
     Mix.shell().info("#{name}: #{branch} at #{revision}")
   end
 
-  defp fast_forward_branch(%{path: path, checkout: checkout, branch: branch}, git) do
-    case git.(["-C", checkout, "merge-base", "--is-ancestor", branch, "origin/#{branch}"], []) do
-      {_output, 0} ->
-        :ok
-
-      {_output, 1} ->
-        Mix.raise("submodule #{path} has local commits that diverge from origin/#{branch}")
-
-      {output, status} ->
-        raise_git_error("compare #{path} with origin/#{branch}", output, status)
-    end
+  defp fast_forward_branch(submodule, git) do
+    %{path: path, checkout: checkout, branch: branch} = submodule
+    ensure_ancestor!(submodule, branch, git)
 
     run_git!(git, ["-C", checkout, "switch", branch], [], "switch #{path} to #{branch}")
 
@@ -158,6 +151,21 @@ defmodule Mix.Tasks.Submodules.Update do
       [],
       "fast-forward #{path}"
     )
+  end
+
+  defp ensure_ancestor!(%{path: path, checkout: checkout, branch: branch}, revision, git) do
+    case git.(["-C", checkout, "merge-base", "--is-ancestor", revision, "origin/#{branch}"], []) do
+      {_output, 0} ->
+        :ok
+
+      {_output, 1} ->
+        Mix.raise(
+          "submodule #{path} has local commits that diverge from origin/#{branch} (#{revision})"
+        )
+
+      {output, status} ->
+        raise_git_error("compare #{path} with origin/#{branch}", output, status)
+    end
   end
 
   defp run_git!(git, args, opts, action) do

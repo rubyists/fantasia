@@ -26,7 +26,7 @@ mechanical stage — no new code changes.
    ```
    gh pr merge <number> --squash --delete-branch
    ```
-5. Always use `mix lc issue` to interact with Linear issues
+5. Always use `mise exec -- mix lc issue` to interact with Linear issues
 6. Post a Linear comment with the merge confirmation.
 7. Move the Linear issue to `Done`.
 
@@ -51,4 +51,4 @@ If this is a rework run (merge was attempted before but failed):
 - Make code changes beyond conflict resolution.
 - Open new PRs.
 - Skip CI checks.
-- Use anything other than `mix lc` to interact with Linear
+- Use anything other than `mise exec -- mix lc` to interact with Linear

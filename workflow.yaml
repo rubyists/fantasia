@@ -1,8 +1,8 @@
 # =============================================================================
-# Stokowski — Example State Machine Workflow
+# Stokowski — Fantasia workflow config
 # =============================================================================
 #
-# This is linear-cli's own checked-in workflow config, not a template to
+# This is Fantasia's own checked-in workflow config, not a template to
 # copy elsewhere. Stokowski re-reads this file on every poll tick — changes
 # take effect without restart.
 #
@@ -73,7 +73,7 @@
 # ---------------------------------------------------------------------------
 tracker:
   kind: linear
-  project_slug: "94a76f2ac65f"    # hex slugId from your Linear project URL
+  project_slug: "25967a4634d3"    # hex slugId from your Linear project URL
   assignee: me                     # only issues assigned to the API key's user
   # api_key: "$LINEAR_API_KEY"  # your Linear API key — agents inherit this
 
@@ -107,19 +107,21 @@ polling:
 # Workspace
 # ---------------------------------------------------------------------------
 workspace:
-  root: ~/.local/share/stokowski/workspaces/linear-cli
+  root: ~/.local/share/stokowski/workspaces/fantasia
 
 # ---------------------------------------------------------------------------
 # Hooks — shell scripts run in the workspace directory
 # ---------------------------------------------------------------------------
 hooks:
   after_create: |
-    git clone --depth 1 --recursive git@github.com:rubyists/linear-cli .
-    mix setup
+    git clone --depth 1 --recursive git@github.com:rubyists/fantasia .
+    mise trust
+    mise install
+    mise exec -- mix setup
   before_run: |
     git fetch origin main
     git rebase origin/main 2>/dev/null || git rebase --abort
-  timeout_ms: 120000
+  timeout_ms: 240000
 
 # ---------------------------------------------------------------------------
 # Shared agent defaults. The vendored bootstrap currently exposes these under

@@ -32,6 +32,9 @@ defmodule Mix.Tasks.Submodules.UpdateTest do
     assert_received {:git, ["-C", ^checkout, "fetch", "origin", "main"], []}
 
     assert_received {:git,
+                     ["-C", ^checkout, "merge-base", "--is-ancestor", "HEAD", "origin/main"], []}
+
+    assert_received {:git,
                      ["-C", ^checkout, "merge-base", "--is-ancestor", "main", "origin/main"], []}
 
     assert_received {:git, ["-C", ^checkout, "switch", "main"], []}
@@ -113,7 +116,10 @@ defmodule Mix.Tasks.Submodules.UpdateTest do
         ["-C", ^checkout, "show-ref" | _] ->
           {"", 0}
 
-        ["-C", ^checkout, "merge-base" | _] ->
+        ["-C", ^checkout, "merge-base", "--is-ancestor", "HEAD", "origin/main"] ->
+          {"", 0}
+
+        ["-C", ^checkout, "merge-base", "--is-ancestor", "main", "origin/main"] ->
           {"", 1}
 
         _ ->
@@ -124,6 +130,35 @@ defmodule Mix.Tasks.Submodules.UpdateTest do
     assert_raise Mix.Error, ~r/local commits that diverge from origin\/main/, fn ->
       Update.run(repository_root, git)
     end
+  end
+
+  @tag :tmp_dir
+  test "refuses a divergent detached HEAD before switching branches", %{tmp_dir: repository_root} do
+    checkout = prepare_submodule(repository_root, "example", "main")
+    caller = self()
+
+    git = fn args, opts ->
+      send(caller, {:git, args, opts})
+
+      case args do
+        ["config" | _] ->
+          {"submodule.vendor/example.path vendor/example\n" <>
+             "submodule.vendor/example.branch main\n", 0}
+
+        ["-C", ^checkout, "merge-base", "--is-ancestor", "HEAD", "origin/main"] ->
+          {"", 1}
+
+        _ ->
+          {"", 0}
+      end
+    end
+
+    assert_raise Mix.Error, ~r/local commits that diverge from origin\/main \(HEAD\)/, fn ->
+      Update.run(repository_root, git)
+    end
+
+    refute_received {:git, ["-C", ^checkout, "show-ref" | _], _opts}
+    refute_received {:git, ["-C", ^checkout, "switch" | _], _opts}
   end
 
   defp prepare_submodule(repository_root, name, branch) do

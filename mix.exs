@@ -21,24 +21,13 @@ defmodule Fantasia.MixProject do
   end
 
   defp aliases do
-    [setup: ["deps.get", &setup_linear_cli/1, "compile"]]
-  end
-
-  defp setup_linear_cli(_args) do
-    mix = System.find_executable("mix") || Mix.raise("could not find mix on PATH")
-    app = Path.join([__DIR__, "vendor", "linear-cli", "app"])
-
-    Mix.shell().info("Fetching vendored Linear CLI dependencies")
-
-    {_output, status} =
-      System.cmd(mix, ["deps.get"],
-        cd: app,
-        into: IO.stream(:stdio, :line),
-        stderr_to_stdout: true
-      )
-
-    if status != 0 do
-      Mix.raise("vendored Linear CLI dependency setup exited with status #{status}")
-    end
+    [setup: ["deps.get", "linear.setup", "compile"]]
   end
 end
+
+# Root tasks must be loaded from the mixfile so they are available before an
+# umbrella child application has been compiled.
+__DIR__
+|> Path.join("mix/tasks/*.ex")
+|> Path.wildcard()
+|> Enum.each(&Code.require_file/1)

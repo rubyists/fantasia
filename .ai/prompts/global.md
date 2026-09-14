@@ -36,16 +36,16 @@ findings, implementation decisions, results, guidance for the next
 stage, and so on. Do not try to maintain or find a single running
 comment to update:
 
-    mix lc issue comment <ISSUE_ID> --body-file <path>
+    mise exec -- mix lc issue comment <ISSUE_ID> --body-file <path>
 
 - Write the comment's full content to a file first, then pass its
   path — never build a multi-line comment as an inline shell argument.
 - Each comment should stand on its own: describe only this step's
   findings, decisions, and results, not the whole history. Read prior
-  comments for context (`mix lc issue ls --full <ISSUE_ID>`); post a new
+  comments for context (`mise exec -- mix lc issue ls --full <ISSUE_ID>`); post a new
   one for what's new, don't try to edit an old one.
-- Always only use `mix lc` to interact with Linear — never call the
-  Linear API directly (curl, GraphQL, or otherwise). If `mix lc` is
+- Always only use `mise exec -- mix lc` to interact with Linear — never call the
+  Linear API directly (curl, GraphQL, or otherwise). If `mise exec -- mix lc` is
   broken, log that error and stop processing.
 
 ## Rework awareness
