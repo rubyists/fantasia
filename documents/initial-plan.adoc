@@ -37,10 +37,12 @@ Every Linear-specific tracker reference in this plan describes the legacy
 compatibility source and the initial +lc+ adapter, not the core architecture.
 The Elixir port must use a tracker registry, normalized tracker contract,
 capability model, and shared conformance suite. +lc+ and +gh+ are the first
-production adapters, and all provider access is through unattended domain CLI
-commands. Direct HTTP/GraphQL clients, generic API passthrough commands, SDKs,
-and MCP tracker integrations are outside this decision. Where this plan
-conflicts with those requirements, the superseding decision controls.
+production adapters, and all provider access is through unattended CLI
+invocations. Direct in-process HTTP/GraphQL clients, SDKs, and MCP tracker
+integrations are outside this decision. Generic CLI API subcommands such as
++gh api+ or a future +lc api+ are allowed inside an adapter when raw provider
+shapes remain contained there. Where this plan conflicts with those
+requirements, the superseding decision controls.
 ====
 
 == Purpose
@@ -131,8 +133,7 @@ without restarting its workflow from the beginning.
 * Shipping production tracker adapters other than +lc+ and +gh+. The pluggable
   interface and its third fake conformance adapter remain initial-release
   requirements under the superseding tracker decision.
-* Direct tracker API/SDK clients, generic API passthrough commands, or MCP
-  tracker integrations.
+* Direct in-process tracker API/SDK clients or MCP tracker integrations.
 * Shipping production runners other than Claude Code and Codex. The pluggable
   interface and its third fake conformance adapter remain initial-release
   requirements under the superseding runner decision.
@@ -506,11 +507,11 @@ assignment, and mutations.
 namespaced configuration validation.
 
 |+Stokowski.Tracker.Lc+
-|Unattended +lc+ domain-command construction, JSON decoding, Linear scope/state
+|Unattended +lc+ command construction, JSON decoding, Linear scope/state
 mapping, and normalization.
 
 |+Stokowski.Tracker.Gh+
-|Unattended +gh issue+ and +gh project+ domain-command construction, JSON
+|Unattended +gh+ command construction, including +gh api+ where needed, JSON
 decoding, GitHub scope/state mapping, and normalization.
 
 |+Stokowski.Tracking+
@@ -1361,7 +1362,7 @@ These are bounded implementation choices, not open-ended scope:
   corpus tests.
 . Confirm the generic Continuum interpreter and in-memory recovery design.
 . Confirm the pluggable CLI tracker registry and normalized contract, then pin
-  the supported unattended +lc+ and +gh+ domain-command protocols behind it.
+  the supported unattended +lc+ and +gh+ command protocols behind it.
 . Confirm the pluggable runner registry and normalized contract, then pin the
   supported Claude and Codex non-interactive command protocols behind it.
 . Select the HTTP/web stack.

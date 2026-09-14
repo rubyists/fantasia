@@ -27,6 +27,14 @@ link:pluggable-runner-interface-decision.adoc[the pluggable runner decision].
 Both boundaries use registries, normalized domain values, explicit
 capabilities, shared process policy, and conformance fixtures.
 
+=== Amendment history
+
+Sep 14, 2026:: Clarified that an adapter may invoke a generic API subcommand
+such as +gh api+ or a future +lc api+. Provider access must still cross the
+unattended CLI process boundary, and raw provider request/response shapes must
+remain private to the adapter. This replaces the original prohibition on
+generic CLI API passthrough commands.
+
 == Context
 
 Fantasia's deterministic phase graph should not depend on the product-specific
@@ -104,18 +112,21 @@ process.
                            provider-owned API
 ----
 
-Fantasia does not call Linear or GitHub HTTP, REST, or GraphQL endpoints
-directly. It does not use an MCP server for tracker work. An adapter also must
-not evade this rule through a generic API passthrough such as +gh api+ or a raw
-GraphQL command. Only documented, provider-domain CLI commands are part of the
-initial boundary.
+Fantasia does not open Linear or GitHub HTTP, REST, or GraphQL connections
+through an in-process client. It does not use an MCP server for tracker work.
+An adapter may invoke documented provider-domain commands or a generic API
+subcommand such as +gh api+ or a future +lc api+. In both cases, provider
+access must cross the same unattended CLI process boundary.
 
-The fact that +lc+ and +gh+ internally use provider APIs does not make those
-APIs Fantasia contracts. Their maintainers own that translation. Fantasia
-pins and tests the CLI behavior it consumes.
+High-level domain commands are preferred when they expose the required stable
+machine output. When a generic API subcommand is necessary, its query,
+mutation, and raw response schema are private adapter implementation details;
+they must be normalized before returning to the caller. The CLI continues to
+own authentication, host selection, and transport. Fantasia pins and tests
+the complete CLI invocation and response behavior it consumes.
 
-A future direct API, SDK, MCP, or long-lived transport requires a new ADR. That
-decision must explicitly take ownership of authentication, connection
+A future in-process API, SDK, MCP, or long-lived transport requires a new ADR.
+That decision must explicitly take ownership of authentication, connection
 lifecycle, pagination, rate limiting, retries, idempotency, API/schema
 compatibility, payload bounds, secret handling, observability, and test
 infrastructure. It must not arrive as an adapter implementation detail.
@@ -133,7 +144,7 @@ an adapter kind and validated adapter configuration.
 
 * capability and compatible-version reporting;
 * validation of their namespaced scope and state-mapping options;
-* construction of documented domain-command argv;
+* construction of documented domain-command or generic API-subcommand argv;
 * decoding and validation of machine-readable output;
 * provider error classification; and
 * translation between native and normalized identities, items, comments,
@@ -331,8 +342,9 @@ The +gh+ adapter uses +gh issue list/view/comment/edit/close/reopen+ and
 +gh project list/field-list/item-list/item-add/item-edit+ as needed. It joins
 Issue data with configured Project fields inside the adapter. Because
 +gh issue comment+ does not return JSON, the adapter confirms its exit and then
-uses a structured read to reconcile the effect marker. It never substitutes
-+gh api+.
+uses a structured read to reconcile the effect marker. It may use +gh api+
+when the high-level commands do not expose a required capability, provided the
+request and response remain adapter-private and have versioned fixtures.
 
 +fantasia doctor+ verifies executable discovery, compatible version, machine
 output, authentication, scope access, required Project fields/state options,
@@ -402,13 +414,13 @@ protocol fixtures become versioned internal contracts.
 In return:
 
 * the phase engine is independent of Linear and GitHub data models;
-* provider API and authentication churn stays behind maintained CLIs;
+* provider authentication and transport churn stays behind maintained CLIs;
 * both tracker subprocesses receive the same timeout, output, stdin, cleanup,
   and redaction policy;
 * deterministic tests need neither network access nor provider credentials;
 * a third CLI tracker is localized to one adapter; and
-* any future API or MCP expansion is visible and reviewable rather than an
-  incidental dependency.
+* any future in-process API or MCP expansion is visible and reviewable rather
+  than an incidental dependency.
 
 The CLI boundary does not eliminate provider differences or network failures.
 It deliberately limits which layer owns them.
@@ -428,11 +440,12 @@ limit, retry, dependency, testing, and security surface before orchestration is
 implemented. The maintained +lc+ and +gh+ commands are the chosen first
 boundary.
 
-=== Use +gh api+ or raw GraphQL because it is still a CLI
+=== Let raw API passthrough shapes escape the adapter
 
-A generic passthrough makes provider API fields and mutations Fantasia's
-contract while preserving only the process-launch syntax. It defeats the
-ownership boundary and is rejected.
++gh api+ and a future +lc api+ are permitted adapter implementation tools. Raw
+provider fields, queries, mutations, and errors becoming core workflow types
+would still make the provider API Fantasia's architecture. That leakage is
+rejected.
 
 === Use MCP tracker servers
 
