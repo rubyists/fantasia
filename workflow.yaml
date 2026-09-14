@@ -180,7 +180,8 @@ states:
     prompt: .ai/prompts/investigate.md
     linear_state: active
     runner: codex
-    reasoning_effort: high
+    model: sol
+    effort: xhigh
     max_turns: 8
     session: inherit
     transitions:
@@ -205,7 +206,8 @@ states:
     prompt: .ai/prompts/implement.md
     linear_state: active
     runner: codex
-    reasoning_effort: medium
+    effort: max
+    model: luna
     max_turns: 30
     session: inherit
     transitions:
@@ -229,8 +231,9 @@ states:
     type: agent
     prompt: .ai/prompts/review.md
     linear_state: active
-    runner: codex
-    reasoning_effort: high
+    runner: claude
+    model: opus
+    effort: xhigh
     max_turns: 10
     session: fresh              # no prior context — adversarial review
     transitions:
@@ -253,9 +256,10 @@ states:
     type: agent
     prompt: .ai/prompts/merge.md
     linear_state: active
-    runner: codex
-    reasoning_effort: low
-    max_turns: 5
+    runner: claude
+    model: sonnet
+    effort: low
+    max_turns: 3
     session: inherit
     transitions:
       complete: done
