@@ -26,8 +26,8 @@ Fantasia issues belong to the `EXT` team and the `Fantasia` project.
 
 - `documents/pre-phase-1-plan.adoc` describes the vendored Python bootstrap.
 - `documents/initial-plan.adoc` describes the initial Elixir port and Fantasia release.
-- `documents/repository-management-mix-tasks-decision.adoc` proposes where repository-wide Mix
-  tasks should live and defines their discovery contract.
+- `documents/repository-management-mix-tasks-decision.adoc` records where repository-wide Mix tasks
+  live and defines their discovery contract.
 
 When a later decision changes a plan, add a new decision document or an implementation note rather
 than rewriting completed history without explanation.

@@ -55,7 +55,7 @@ defmodule Mix.Tasks.Stokowski do
   end
 
   defp umbrella_root do
-    Path.expand("../..", __DIR__)
+    Path.expand("../../../../..", __DIR__)
   end
 
   defp ensure_file!(path, name) do

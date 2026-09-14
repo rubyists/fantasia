@@ -13,7 +13,7 @@ defmodule Mix.Tasks.Linear.Setup do
       Mix.raise("mix linear.setup does not accept arguments")
     end
 
-    root = Path.expand("../..", __DIR__)
+    root = repository_root()
     app = Path.join([root, "vendor", "linear-cli", "app"])
 
     unless File.regular?(Path.join(app, "mix.exs")) do
@@ -38,5 +38,9 @@ defmodule Mix.Tasks.Linear.Setup do
     end
 
     :ok
+  end
+
+  defp repository_root do
+    Path.expand("../../../../..", __DIR__)
   end
 end

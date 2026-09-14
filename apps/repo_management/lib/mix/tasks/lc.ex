@@ -74,9 +74,7 @@ defmodule Mix.Tasks.Lc do
   end
 
   defp repository_root do
-    Mix.Project.project_file()
-    |> Path.dirname()
-    |> Path.expand()
+    Path.expand("../../../../..", __DIR__)
   end
 
   defp port_env(environment) do

@@ -21,13 +21,6 @@ defmodule Fantasia.MixProject do
   end
 
   defp aliases do
-    [setup: ["deps.get", "linear.setup", "compile"]]
+    [setup: ["deps.get", "compile", "linear.setup"]]
   end
 end
-
-# Root tasks must be loaded from the mixfile so they are available before an
-# umbrella child application has been compiled.
-__DIR__
-|> Path.join("mix/tasks/*.ex")
-|> Path.wildcard()
-|> Enum.each(&Code.require_file/1)

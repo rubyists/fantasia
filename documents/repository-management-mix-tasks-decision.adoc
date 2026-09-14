@@ -52,7 +52,7 @@ to remain undiscoverable after that boundary.
 * The bootstrap path remains small and does not depend on a compiled custom
   task before compilation has happened.
 
-== Proposed decision
+== Decision
 
 Create an umbrella child named +:repo_management+ at
 +apps/repo_management+. Put all repository-wide Mix tasks and their tests in

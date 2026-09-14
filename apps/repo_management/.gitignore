@@ -1,0 +1,5 @@
+/cover/
+/doc/
+/tmp/
+erl_crash.dump
+repo_management-*.tar
