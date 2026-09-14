@@ -15,14 +15,13 @@ defmodule Stokowski.Tracking do
   end
 
   defp markers(comment, kind) do
-    created_at = comment["createdAt"] || comment[:created_at]
     body = comment["body"] || comment[:body] || ""
 
     Regex.scan(@marker, body, capture: :all_names)
     |> Enum.flat_map(fn [json, found_kind] ->
       with true <- found_kind == kind,
            {:ok, payload} <- Jason.decode(json),
-           timestamp when is_binary(timestamp) <- payload["timestamp"] || created_at,
+           timestamp when is_binary(timestamp) <- payload["timestamp"],
            {:ok, parsed, _offset} <- DateTime.from_iso8601(timestamp) do
         [%{kind: found_kind, payload: payload, timestamp: parsed}]
       else

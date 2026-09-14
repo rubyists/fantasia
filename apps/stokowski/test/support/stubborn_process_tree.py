@@ -13,13 +13,15 @@ mode, pid_file = sys.argv[1:]
 ignore_term()
 
 if mode == "grandchild":
+    with open(pid_file, "a", encoding="utf-8") as handle:
+        handle.write(f"{os.getpid()}\n")
     while True:
         time.sleep(60)
 
 if mode == "child":
-    grandchild = subprocess.Popen([sys.executable, __file__, "grandchild", pid_file])
     with open(pid_file, "a", encoding="utf-8") as handle:
-        handle.write(f"{grandchild.pid}\n")
+        handle.write(f"{os.getpid()}\n")
+    grandchild = subprocess.Popen([sys.executable, __file__, "grandchild", pid_file])
     while True:
         time.sleep(60)
 
@@ -29,8 +31,8 @@ if session_pid:
     sys.exit(0)
 
 os.setsid()
-child = subprocess.Popen([sys.executable, __file__, "child", pid_file])
 with open(pid_file, "w", encoding="utf-8") as handle:
-    handle.write(f"{os.getpid()}\n{child.pid}\n")
+    handle.write(f"{os.getpid()}\n")
+child = subprocess.Popen([sys.executable, __file__, "child", pid_file])
 while True:
     time.sleep(60)

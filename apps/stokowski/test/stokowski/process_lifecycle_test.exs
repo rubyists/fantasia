@@ -16,13 +16,20 @@ defmodule Stokowski.ProcessLifecycleTest do
         args: [script, "parent", pid_file]
       ])
 
-    pids = await_pids(pid_file)
-    [group_leader | _] = pids
-
     on_exit(fn ->
-      if Enum.any?(pids, &alive?/1), do: group_signal("KILL", group_leader)
+      case read_pids(pid_file) do
+        [group_leader | _] = cleanup_pids ->
+          if Enum.any?(cleanup_pids, &alive?/1), do: group_signal("KILL", group_leader)
+
+        [] ->
+          :ok
+      end
+
       if Port.info(port), do: Port.close(port)
     end)
+
+    pids = await_pids(pid_file)
+    [group_leader | _] = pids
 
     assert {_, 0} = group_signal("TERM", group_leader)
     Process.sleep(50)
@@ -37,17 +44,30 @@ defmodule Stokowski.ProcessLifecycleTest do
   defp await_pids(_path, 0), do: flunk("process tree did not become ready")
 
   defp await_pids(path, attempts) do
-    pids =
-      case File.read(path) do
-        {:ok, contents} -> contents |> String.split() |> Enum.map(&String.to_integer/1)
-        {:error, _reason} -> []
-      end
+    pids = read_pids(path)
 
     if length(pids) == 3 do
       pids
     else
       Process.sleep(10)
       await_pids(path, attempts - 1)
+    end
+  end
+
+  defp read_pids(path) do
+    case File.read(path) do
+      {:ok, contents} ->
+        contents
+        |> String.split()
+        |> Enum.flat_map(fn value ->
+          case Integer.parse(value) do
+            {pid, ""} -> [pid]
+            _invalid -> []
+          end
+        end)
+
+      {:error, _reason} ->
+        []
     end
   end
 

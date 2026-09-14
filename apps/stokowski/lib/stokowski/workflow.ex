@@ -44,6 +44,7 @@ defmodule Stokowski.Workflow do
           | {:error,
              :multiple_documents
              | {:duplicate_key, binary()}
+             | {:invalid_key, term()}
              | {:invalid_merge, :mapping_required}}
   def normalize(%__MODULE__{documents: [document]}), do: normalize_value(document)
   def normalize(%__MODULE__{}), do: {:error, :multiple_documents}
@@ -74,14 +75,41 @@ defmodule Stokowski.Workflow do
   defp normalize_value(value), do: {:ok, value}
 
   defp normalize_mapping(entries) do
-    {merges, explicit} =
-      Enum.split_with(entries, fn {key, _value} -> Regex.match?(~r/^<<\d*$/, key) end)
+    with :ok <- validate_mapping_keys(entries),
+         :ok <- reject_duplicate_keys(entries) do
+      {merges, explicit} = Enum.split_with(entries, fn {key, _value} -> merge_key?(key) end)
 
-    with {:ok, inherited} <- normalize_merges(merges),
-         {:ok, normalized} <- normalize_explicit(explicit) do
-      {:ok, Map.merge(inherited, normalized)}
+      with {:ok, inherited} <- normalize_merges(merges),
+           {:ok, normalized} <- normalize_explicit(explicit) do
+        {:ok, Map.merge(inherited, normalized)}
+      end
     end
   end
+
+  defp validate_mapping_keys(entries) do
+    Enum.reduce_while(entries, :ok, fn
+      {key, _value}, :ok when is_binary(key) -> {:cont, :ok}
+      {key, _value}, :ok -> {:halt, {:error, {:invalid_key, key}}}
+    end)
+  end
+
+  defp reject_duplicate_keys(entries) do
+    Enum.reduce_while(entries, MapSet.new(), fn {key, _value}, seen ->
+      identity = if merge_key?(key), do: "<<", else: key
+
+      if MapSet.member?(seen, identity) do
+        {:halt, {:error, {:duplicate_key, identity}}}
+      else
+        {:cont, MapSet.put(seen, identity)}
+      end
+    end)
+    |> case do
+      %MapSet{} -> :ok
+      error -> error
+    end
+  end
+
+  defp merge_key?(key), do: Regex.match?(~r/^<<\d*$/, key)
 
   defp normalize_merges(entries) do
     Enum.reduce_while(entries, {:ok, %{}}, fn {_key, value}, {:ok, result} ->
@@ -100,13 +128,9 @@ defmodule Stokowski.Workflow do
 
   defp normalize_explicit(entries) do
     Enum.reduce_while(entries, {:ok, %{}}, fn {key, value}, {:ok, result} ->
-      if Map.has_key?(result, key) do
-        {:halt, {:error, {:duplicate_key, key}}}
-      else
-        case normalize_value(value) do
-          {:ok, normalized} -> {:cont, {:ok, Map.put(result, key, normalized)}}
-          {:error, _reason} = error -> {:halt, error}
-        end
+      case normalize_value(value) do
+        {:ok, normalized} -> {:cont, {:ok, Map.put(result, key, normalized)}}
+        {:error, _reason} = error -> {:halt, error}
       end
     end)
   end

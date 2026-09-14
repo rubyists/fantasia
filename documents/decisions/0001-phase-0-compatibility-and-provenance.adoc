@@ -16,10 +16,13 @@ names a source commit or executable version, an immutable fixture, observable in
 `preserve`, `correct`, or `defer` disposition, and an owning ADR. Tests reject incomplete rows,
 duplicate identifiers, unknown dispositions, invalid provenance, and missing fixtures or ADRs.
 
-The compatibility baseline is `vendor/stokowski@b80db05`, `vendor/Continuum@237dfbb`, and
-`codex-cli@0.154.0`. Codex is resolved by asking mise for the checkout-selected executable, probing
-that absolute path, and comparing the observed version with `mise.toml`. The verified directory is
-prepended for the Python child. Startup reports only the executable path and version.
+The compatibility evidence baseline is `vendor/stokowski@b80db05`,
+`vendor/Continuum@237dfbb`, and `codex-cli@0.154.0`. Fantasia pins the Stokowski follow-up
+`342862a`, which implements the environment-containment correction recorded in ADR 0003; rows for
+preserved baseline behavior continue to cite `b80db05`. Codex is resolved by asking mise for the
+checkout-selected executable, probing that absolute path, and comparing the observed version with
+`mise.toml`. The verified directory is prepended for the Python child. Startup reports only the
+executable path and version.
 
 == Consequences
 

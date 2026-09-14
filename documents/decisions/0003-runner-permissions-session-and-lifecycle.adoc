@@ -27,4 +27,7 @@ production command supervisor remains Phase 1 work.
 Runner environments start from an allowlist (`HOME`, `PATH`, locale, temporary-directory and agent
 socket variables), add explicit project variables, and redact secret-shaped names from diagnostics.
 Copying the complete parent environment is corrected and must not be reintroduced, especially with
-unrestricted execution.
+unrestricted execution. Vendored Stokowski commit `342862a` enforces this both while constructing
+the project environment and immediately before spawning the agent process; its subprocess test
+observes that `SSH_AUTH_SOCK` and declared project values cross the boundary while unrelated and
+secret-shaped ambient variables do not.

@@ -70,6 +70,27 @@ defmodule Stokowski.RunnerTrackingTest do
     assert latest.payload["state"] == "implement"
   end
 
+  test "tracking ignores markers without a valid embedded timestamp" do
+    comments = [
+      %{
+        "createdAt" => "2026-09-14T06:00:00Z",
+        "body" => ~s(<!-- stokowski:state {"state":"missing"} -->)
+      },
+      %{
+        "createdAt" => "2026-09-14T06:01:00Z",
+        "body" => ~s(<!-- stokowski:state {"state":"invalid","timestamp":"not-a-time"} -->)
+      },
+      %{
+        "createdAt" => "2026-09-14T05:00:00Z",
+        "body" =>
+          ~s(<!-- stokowski:state {"state":"valid","timestamp":"2026-09-14T05:00:00Z"} -->)
+      }
+    ]
+
+    assert {:ok, latest} = Tracking.latest(comments, "state")
+    assert latest.payload["state"] == "valid"
+  end
+
   test "child environment excludes ambient secrets and overlays declared values" do
     parent = %{
       "PATH" => "/bin",

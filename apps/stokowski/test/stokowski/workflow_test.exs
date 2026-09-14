@@ -62,6 +62,28 @@ defmodule Stokowski.WorkflowTest do
   end
 
   @tag :tmp_dir
+  test "rejects non-string mapping keys without crashing", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "non-string-key.yaml")
+    File.write!(path, "1: numeric\n")
+
+    assert {:ok, workflow} = Workflow.read(path)
+    assert {:error, {:invalid_key, 1}} = Workflow.normalize(workflow)
+  end
+
+  @tag :tmp_dir
+  test "rejects duplicate YAML merge keys", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "duplicate-merges.yaml")
+
+    File.write!(
+      path,
+      "first: &first {runner: codex}\nsecond: &second {session: fresh}\nstate:\n  <<: *first\n  <<: *second\n"
+    )
+
+    assert {:ok, workflow} = Workflow.read(path)
+    assert {:error, {:duplicate_key, "<<"}} = Workflow.normalize(workflow)
+  end
+
+  @tag :tmp_dir
   test "preserves empty mapping and sequence types", %{tmp_dir: tmp_dir} do
     path = Path.join(tmp_dir, "empty-containers.yaml")
     File.write!(path, "mapping: {}\nsequence: []\nnested:\n  - {}\n  - []\n")

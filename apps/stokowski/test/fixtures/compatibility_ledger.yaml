@@ -55,7 +55,7 @@
   disposition: correct
   adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
 - id: runner-environment
-  source: vendor/stokowski@b80db05
+  source: vendor/stokowski@342862a
   fixture: apps/stokowski/test/fixtures/runners/environment.yaml
   input: inherited process environment and project variables
   output: allowlist plus explicit project values; ambient secrets excluded
