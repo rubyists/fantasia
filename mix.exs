@@ -21,6 +21,6 @@ defmodule Fantasia.MixProject do
   end
 
   defp aliases do
-    [setup: ["deps.get"]]
+    [setup: ["deps.get", "compile", "linear.setup"]]
   end
 end
