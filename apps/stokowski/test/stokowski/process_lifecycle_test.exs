@@ -49,7 +49,7 @@ defmodule Stokowski.ProcessLifecycleTest do
   end
 
   defp group_signal(signal, pid),
-    do: System.cmd("/bin/kill", ["-#{signal}", "-#{pid}"], stderr_to_stdout: true)
+    do: System.cmd("/bin/kill", ["-#{signal}", "--", "-#{pid}"], stderr_to_stdout: true)
 
   defp alive?(pid) do
     case System.cmd("/bin/kill", ["-0", Integer.to_string(pid)], stderr_to_stdout: true) do

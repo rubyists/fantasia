@@ -54,8 +54,10 @@ defmodule Mix.Tasks.Phase0.Verify do
       File.cp!(source, artifact)
       File.chmod!(artifact, 0o755)
 
+      expected = "fantasia #{Stokowski.version()}\n"
+
       case System.cmd(artifact, ["version"], cd: smoke_dir, stderr_to_stdout: true) do
-        {"fantasia 0.1.0\n", 0} -> :ok
+        {^expected, 0} -> :ok
         {_output, _status} -> Mix.raise("packaged fantasia version smoke failed")
       end
     after
