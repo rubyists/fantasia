@@ -44,4 +44,22 @@ defmodule Stokowski.WorkflowTest do
 
     assert {:error, %YamlElixir.ParsingError{}} = Workflow.read(path)
   end
+
+  test "normalizes the full workflow fixture with string keys" do
+    path = fixture("config/full-workflow.yaml")
+
+    assert {:ok, workflow} = Workflow.read(path)
+    assert {:ok, normalized} = Workflow.normalize(workflow)
+    assert normalized["states"]["investigate"]["runner"] == "codex"
+    assert normalized["states"]["investigate"]["session"] == "fresh"
+    assert normalized["flags"] == [true, false, nil, 7, 2.5]
+    assert byte_size(Workflow.fingerprint(normalized)) == 64
+  end
+
+  test "rejects duplicate keys during normalization" do
+    assert {:ok, workflow} = Workflow.read(fixture("config/duplicate-keys.yaml"))
+    assert {:error, {:duplicate_key, "runner"}} = Workflow.normalize(workflow)
+  end
+
+  defp fixture(name), do: Path.expand("../fixtures/#{name}", __DIR__)
 end

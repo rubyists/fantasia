@@ -1,0 +1,7 @@
+issue:
+  identifier: EXT-57
+  title: Fantasia Phase 0
+  state: implement
+is_rework: true
+review_comments:
+  - Keep Codex current.

@@ -1,0 +1,19 @@
+= ADR 0004: Continuum 0.8.1 and recovery authority
+:status: accepted
+:date: 2026-09-14
+
+== Decision
+
+Fantasia uses the vendored Continuum commit `237dfbb` (0.8.1), not the historical 0.7.1 plan. A run
+receives the complete normalized graph and its deterministic schema/config fingerprint. The generic
+workflow journals that snapshot as its first side effect and interprets only the snapshot. Replay
+must not reread YAML, environment, defaults, clock, or module selection.
+
+The Phase 0 executable proof changes the caller's input after execution and demonstrates that replay
+still returns the journaled graph. This establishes input immutability without implementing the full
+orchestrator.
+
+The in-memory journal is supported only for process-local execution and deterministic tests. Linear
+tracking markers remain cross-process recovery authority in the initial compatibility release.
+PostgreSQL is required before Fantasia claims durable cross-process Continuum recovery; selecting a
+current YAML file during recovery is never allowed.

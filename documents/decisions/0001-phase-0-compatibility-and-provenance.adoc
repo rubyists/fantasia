@@ -1,0 +1,28 @@
+= ADR 0001: Phase 0 compatibility and provenance
+:status: accepted
+:date: 2026-09-14
+
+== Context
+
+Fantasia replaces behavior from a moving Python implementation. Textual version declarations are
+insufficient evidence because parent mise configuration can place an unrelated executable first on
+`PATH`.
+
+== Decision
+
+The machine-readable ledger at
+`apps/stokowski/test/fixtures/compatibility_ledger.yaml` is the normative Phase 0 index. Every row
+names a source commit or executable version, an immutable fixture, observable input and output, a
+`preserve`, `correct`, or `defer` disposition, and an owning ADR. Tests reject incomplete rows,
+duplicate identifiers, unknown dispositions, invalid provenance, and missing fixtures or ADRs.
+
+The compatibility baseline is `vendor/stokowski@b80db05`, `vendor/Continuum@237dfbb`, and
+`codex-cli@0.154.0`. Codex is resolved by asking mise for the checkout-selected executable, probing
+that absolute path, and comparing the observed version with `mise.toml`. The verified directory is
+prepended for the Python child. Startup reports only the executable path and version.
+
+== Consequences
+
+Fixture changes require an explicit ledger decision. Ambient `PATH` order cannot silently replace
+Codex. Updating Codex requires updating the pin, provenance fixture, and capability evidence in one
+change.

@@ -1,0 +1,16 @@
+argv:
+  - codex
+  - exec
+  - --sandbox
+  - danger-full-access
+  - --ephemeral
+  - --json
+  - --cd
+  - WORKSPACE
+  - --config
+  - 'approval_policy="never"'
+  - --config
+  - 'model_reasoning_effort="high"'
+stdin: closed
+session: fresh
+valid_reasoning: [minimal, low, medium, high, xhigh]

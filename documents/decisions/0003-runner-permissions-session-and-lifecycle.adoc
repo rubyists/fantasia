@@ -1,0 +1,30 @@
+= ADR 0003: Runner permissions, sessions, environment, and lifecycle
+:status: accepted
+:date: 2026-09-14
+
+== Context
+
+Stokowski `b80db05` supersedes the workspace-write proposal in
+`documents/pre-phase-1-plan.adoc`. It invokes `codex exec` with JSONL, closed stdin,
+`danger-full-access`, `approval_policy="never"`, and ephemeral sessions so autonomous Git metadata
+updates work.
+
+== Decision
+
+Fantasia preserves that argv as compatibility evidence but treats unrestricted execution as an
+explicit deployment capability, never OS isolation. It may run only against a trusted repository
+inside a container or equivalent external boundary. The checked-in workflow declares every Codex
+phase `session: fresh`; a fresh run must never be labelled resumed. Resume remains deferred until a
+runner persists a thread identifier and proves `codex exec resume` compatibility.
+
+Runner events are normalized from JSONL; stdin is closed; stdout and stderr are drained with bounds.
+The production lifecycle contract is argv-only process groups with TERM, a bounded grace period,
+then group KILL on timeout, stall, cancellation, or application shutdown. The current Python
+immediate-KILL behavior is not normative. A fake stubborn parent/child/grandchild proves the POSIX
+TERM/grace/group-KILL primitive in both target CI environments. Integrating that primitive into the
+production command supervisor remains Phase 1 work.
+
+Runner environments start from an allowlist (`HOME`, `PATH`, locale, temporary-directory and agent
+socket variables), add explicit project variables, and redact secret-shaped names from diagnostics.
+Copying the complete parent environment is corrected and must not be reintroduced, especially with
+unrestricted execution.

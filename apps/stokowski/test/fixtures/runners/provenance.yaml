@@ -1,0 +1,5 @@
+package: "@openai/codex"
+version: 0.154.0
+resolution: mise which codex
+verify: codex --version
+reject_drift: true

@@ -62,7 +62,23 @@ opt-in mode after the no-database workflow reaches parity.
 
 ## Usage
 
+Validate the Phase 0 contracts and build the unpublished checkout-independent artifact:
+
+[source,shell]
+----
+mise exec -- mix phase0.verify
+./fantasia version
+----
+
+The verification builds a BEAM escript, copies it to a temporary directory outside the checkout,
+and requires it to report `fantasia 0.1.0`. The artifact requires a compatible Erlang runtime; native
+standalone packaging is intentionally deferred by ADR 0005.
+
 ## Contributing
+
+Compatibility behavior and its provenance are indexed by
+`apps/stokowski/test/fixtures/compatibility_ledger.yaml`; normative decisions live under
+`documents/decisions/`.
 
 ## Copying
 

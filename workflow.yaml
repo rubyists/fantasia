@@ -169,6 +169,9 @@ server:
 #   - Human approves a gate        → "approve" transition
 #   - Human requests rework        → rework_to target
 # Codex agent states may override `model` and `reasoning_effort` independently.
+# The vendored b80db05 adapter always starts an ephemeral fresh session with
+# danger-full-access and approval_policy=never. Run only in a trusted checkout
+# inside an external isolation boundary; workflow states cannot weaken it.
 #
 states:
 
@@ -182,7 +185,7 @@ states:
     runner: codex
     reasoning_effort: high
     max_turns: 8
-    session: inherit
+    session: fresh
     transitions:
       complete: research-review
 
@@ -207,7 +210,7 @@ states:
     runner: codex
     reasoning_effort: medium
     max_turns: 30
-    session: inherit
+    session: fresh
     transitions:
       complete: implementation-review
 
@@ -256,7 +259,7 @@ states:
     runner: codex
     reasoning_effort: low
     max_turns: 5
-    session: inherit
+    session: fresh
     transitions:
       complete: done
 

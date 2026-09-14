@@ -11,10 +11,20 @@ mise install
 mise exec -- mix setup
 mise exec -- mix format --check-formatted
 mise exec -- mix test
+mise exec -- mix cmd --app stokowski mix escript.build
+./fantasia version
+mise exec -- mix phase0.verify
 ```
 
 Use `mise exec -- mix stokowski --dry-run` to validate and launch the vendored bootstrap workflow
 without relying on ambient tool versions.
+
+The Phase 0 package is an unsigned escript. CI builds and runs it outside the checkout on native
+Linux x86_64 and macOS arm64 hosts; do not publish it as a release artifact.
+
+`mix phase0.verify` validates the compatibility ledger, builds the `fantasia` escript, and executes
+`fantasia version` from outside the checkout. Phase 0 contract code belongs in `apps/stokowski`;
+repository-wide verification and launch tasks belong in `apps/repo_management`.
 
 ## Linear
 

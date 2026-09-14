@@ -1,0 +1,11 @@
+inherit:
+  - HOME
+  - LANG
+  - LC_ALL
+  - PATH
+  - SHELL
+  - TERM
+  - TMPDIR
+  - USER
+declared_overrides_inherited: true
+ambient_secrets: redact

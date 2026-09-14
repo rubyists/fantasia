@@ -16,6 +16,7 @@ defmodule Mix.Tasks.StokowskiTest do
 
     assert output =~ "fake uv stdout"
     assert output =~ "fake uv stderr"
+    assert output =~ "Using Codex 0.154.0 at"
 
     assert File.read!(invocation) ==
              Enum.join(
@@ -105,6 +106,18 @@ defmodule Mix.Tasks.StokowskiTest do
     refute Exception.message(error) =~ "malformed-secret"
   end
 
+  @tag :tmp_dir
+  test "rejects Codex version drift without exposing probe output", %{tmp_dir: tmp_dir} do
+    {root, _vendor, _invocation} = fake_checkout(tmp_dir, 0, "codex-cli 0.999.0")
+
+    error =
+      assert_raise Mix.Error, "repository-managed Codex version does not match mise.toml", fn ->
+        StokowskiTask.resolve_codex!(root)
+      end
+
+    refute Exception.message(error) =~ "0.999.0"
+  end
+
   defp validate(workflow) do
     StokowskiTask.validate_api_key!(workflow)
   end
@@ -115,7 +128,7 @@ defmodule Mix.Tasks.StokowskiTest do
     path
   end
 
-  defp fake_checkout(tmp_dir, exit_status) do
+  defp fake_checkout(tmp_dir, exit_status, codex_version \\ "codex-cli 0.154.0") do
     root = Path.join(tmp_dir, "repo")
     vendor = Path.join([root, "vendor", "stokowski"])
     bin = Path.join(tmp_dir, "bin")
@@ -124,6 +137,7 @@ defmodule Mix.Tasks.StokowskiTest do
     File.mkdir_p!(vendor)
     File.mkdir_p!(bin)
     File.write!(Path.join(root, "workflow.yaml"), "tracker: {kind: linear}\n")
+    File.write!(Path.join(root, "mise.toml"), "[tools]\ncodex = \"0.154.0\"\n")
     File.write!(Path.join(vendor, "pyproject.toml"), "")
 
     write_executable!(
@@ -141,7 +155,13 @@ defmodule Mix.Tasks.StokowskiTest do
       """
     )
 
-    write_executable!(Path.join(bin, "codex"), "#!/bin/sh\nexit 0\n")
+    codex = Path.join(bin, "codex")
+    write_executable!(codex, "#!/bin/sh\nprintf '%s\\n' '#{codex_version}'\n")
+
+    write_executable!(
+      Path.join(bin, "mise"),
+      "#!/bin/sh\n[ \"$1 $2\" = \"which codex\" ] || exit 2\nprintf '%s\\n' '#{codex}'\n"
+    )
 
     original_path = System.get_env("PATH")
     System.put_env("PATH", Enum.join([bin, original_path], ":"))

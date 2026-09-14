@@ -29,7 +29,8 @@ defmodule Mix.Tasks.Stokowski do
     validate_api_key!(workflow)
 
     uv = executable!("uv")
-    executable!("codex")
+    {codex, codex_version} = resolve_codex!(root)
+    Mix.shell().info("Using Codex #{codex_version} at #{codex}")
 
     lockfile = Path.join(vendor, "uv.lock")
     lockfile_existed? = File.exists?(lockfile)
@@ -40,6 +41,7 @@ defmodule Mix.Tasks.Stokowski do
       try do
         System.cmd(uv, command_args,
           cd: root,
+          env: [{"PATH", prepend_path(Path.dirname(codex))}],
           stderr_to_stdout: true,
           into: IO.stream(:stdio, :line)
         )
@@ -51,6 +53,21 @@ defmodule Mix.Tasks.Stokowski do
 
     if status != 0 do
       Mix.raise("vendored Stokowski exited with status #{status}")
+    end
+  end
+
+  @doc false
+  def resolve_codex!(root) do
+    expected_version = configured_codex_version!(Path.join(root, "mise.toml"))
+    mise = executable!("mise")
+
+    case System.cmd(mise, ["which", "codex"], cd: root, stderr_to_stdout: true) do
+      {output, 0} ->
+        codex = String.trim(output)
+        verify_codex!(codex, expected_version)
+
+      {_output, _status} ->
+        Mix.raise("could not resolve the repository-managed Codex executable; run mise install")
     end
   end
 
@@ -98,6 +115,40 @@ defmodule Mix.Tasks.Stokowski do
     case System.find_executable(name) do
       nil -> Mix.raise("#{name} is unavailable; run mise install and retry")
       path -> path
+    end
+  end
+
+  defp configured_codex_version!(path) do
+    ensure_file!(path, "mise.toml")
+
+    case Regex.run(~r/^codex\s*=\s*"([^"]+)"\s*$/m, File.read!(path), capture: :all_but_first) do
+      [version] -> version
+      _ -> Mix.raise("mise.toml must declare an exact Codex version")
+    end
+  end
+
+  defp verify_codex!(codex, expected_version) do
+    unless Path.type(codex) == :absolute and File.regular?(codex) do
+      Mix.raise("mise resolved an invalid Codex executable path")
+    end
+
+    case System.cmd(codex, ["--version"], stderr_to_stdout: true) do
+      {output, 0} ->
+        case Regex.run(~r/^codex-cli\s+(\S+)\s*$/, String.trim(output), capture: :all_but_first) do
+          [^expected_version] -> {codex, expected_version}
+          [_observed] -> Mix.raise("repository-managed Codex version does not match mise.toml")
+          _ -> Mix.raise("repository-managed Codex returned an unrecognized version")
+        end
+
+      {_output, _status} ->
+        Mix.raise("repository-managed Codex version probe failed")
+    end
+  end
+
+  defp prepend_path(directory) do
+    case System.get_env("PATH") do
+      nil -> directory
+      path -> directory <> ":" <> path
     end
   end
 

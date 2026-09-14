@@ -1,16 +1,19 @@
 defmodule Stokowski.MixProject do
   use Mix.Project
 
+  @version "../../.version.txt" |> Path.expand(__DIR__) |> File.read!() |> String.trim()
+
   def project do
     [
       app: :stokowski,
-      version: "0.1.0",
+      version: @version,
       build_path: "../../_build",
       config_path: "../../config/config.exs",
       deps_path: "../../deps",
       lockfile: "../../mix.lock",
       elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
+      escript: [main_module: Stokowski.CLI, name: "fantasia", path: "../../fantasia"],
       deps: deps()
     ]
   end
@@ -25,6 +28,8 @@ defmodule Stokowski.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:continuum, path: "../../vendor/Continuum"},
+      {:jason, "~> 1.4"},
       {:yaml_elixir, "~> 2.12"}
     ]
   end

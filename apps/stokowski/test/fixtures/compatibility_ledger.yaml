@@ -1,0 +1,98 @@
+- id: yaml-normalization
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/config/full-workflow.yaml
+  input: YAML workflow with anchors, scalars, and normalized state names
+  output: one immutable string-keyed workflow map
+  disposition: preserve
+  adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
+- id: duplicate-keys
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/config/duplicate-keys.yaml
+  input: mapping containing duplicate runner keys
+  output: validation error before map conversion
+  disposition: correct
+  adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
+- id: prompt-context
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/prompts/context.yaml
+  input: nested issue context, condition, lower filter, and rework comments
+  output: nested issue values and true rework state are canonical
+  disposition: correct
+  adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
+- id: tracking-order
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/tracking/comments.yaml
+  input: mixed marker generations in non-chronological response order
+  output: newest valid timestamp wins and legacy markers remain readable
+  disposition: correct
+  adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
+- id: codex-argv
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/runners/codex.yaml
+  input: Codex agent state with high reasoning
+  output: danger-full-access ephemeral JSONL argv with approval never
+  disposition: preserve
+  adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
+- id: codex-events
+  source: codex-cli@0.154.0
+  fixture: apps/stokowski/test/fixtures/runners/codex-events.jsonl
+  input: newline-delimited Codex events
+  output: activity summaries, final message, and token usage
+  disposition: preserve
+  adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
+- id: codex-tool-resolution
+  source: codex-cli@0.154.0
+  fixture: apps/stokowski/test/fixtures/runners/provenance.yaml
+  input: inherited PATH shadows the repository-managed executable
+  output: exact mise path and observed version match the repository pin
+  disposition: correct
+  adr: documents/decisions/0001-phase-0-compatibility-and-provenance.adoc
+- id: codex-session
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/runners/codex.yaml
+  input: checked-in session request
+  output: every Codex phase is explicitly fresh
+  disposition: correct
+  adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
+- id: runner-environment
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/runners/environment.yaml
+  input: inherited process environment and project variables
+  output: allowlist plus explicit project values; ambient secrets excluded
+  disposition: correct
+  adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
+- id: process-tree-cleanup
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/runners/process-lifecycle.yaml
+  input: stubborn parent, child, and grandchild in a dedicated POSIX process group
+  output: TERM grace preserves stubborn processes and group KILL removes the tree
+  disposition: correct
+  adr: documents/decisions/0003-runner-permissions-session-and-lifecycle.adoc
+- id: linear-assignee
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/linear/responses.yaml
+  input: assignee me with paginated partial and malformed nodes
+  output: authenticated-user scoped admission and safe malformed-node rejection
+  disposition: preserve
+  adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
+- id: continuum-input
+  source: vendor/Continuum@237dfbb
+  fixture: apps/stokowski/test/fixtures/config/normalized-flow.yaml
+  input: normalized graph plus schema fingerprint
+  output: journaled snapshot remains authoritative during replay
+  disposition: correct
+  adr: documents/decisions/0004-continuum-recovery.adoc
+- id: native-terminal
+  source: vendor/drafter@b5f7ef9
+  fixture: apps/stokowski/test/fixtures/runners/distribution.yaml
+  input: native terminal dependency requested by operator UI
+  output: adoption deferred until packaged native loading is proven
+  disposition: defer
+  adr: documents/decisions/0005-distribution-and-release.adoc
+- id: release-artifact
+  source: vendor/stokowski@b80db05
+  fixture: apps/stokowski/test/fixtures/runners/distribution.yaml
+  input: fantasia version invoked outside the checkout
+  output: self-contained BEAM escript prints the canonical application version
+  disposition: correct
+  adr: documents/decisions/0005-distribution-and-release.adoc

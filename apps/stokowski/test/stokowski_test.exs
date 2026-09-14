@@ -1,8 +1,7 @@
 defmodule StokowskiTest do
   use ExUnit.Case
-  doctest Stokowski
 
-  test "greets the world" do
-    assert Stokowski.hello() == :world
+  test "reports the application version" do
+    assert Stokowski.version() == "0.1.0"
   end
 end

@@ -1,0 +1,8 @@
+argv_only: true
+new_process_group: true
+termination:
+  - TERM
+  - grace
+  - KILL
+platforms: [linux-x86_64, macos-arm64]
+phase_0_status: executable-posix-probe

@@ -1,0 +1,5 @@
+version_command: fantasia version
+artifact: beam-escript
+targets: [macos-arm64, linux-x86_64]
+native_dependencies: deferred
+publish: false
