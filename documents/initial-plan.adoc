@@ -12,6 +12,21 @@ This document describes the first compatibility release of Fantasia. It is a
 plan, not a claim that the listed work is already implemented.
 ====
 
+[IMPORTANT]
+====
+Superseding decision: link:pluggable-runner-interface-decision.adoc[Pluggable
+runner interface].
+
+Every reference in this plan to Claude Code and Codex as the supported runners
+describes the initial built-in adapters, not a closed runner enumeration. The
+Elixir port must use a registry, normalized runner contract, capability model,
+and shared conformance suite that make a third runner an adapter-only change.
+The initial release need not ship another production adapter, but proving the
+extension boundary with a third fake adapter is part of its definition of done.
+Where this plan conflicts with that requirement, the superseding decision
+controls.
+====
+
 == Purpose
 
 Port the behavior of +vendor/stokowski+ into the existing Elixir umbrella as
@@ -23,8 +38,8 @@ does need to preserve the useful operator contract:
 * Linear issues drive autonomous work.
 * Work advances through an explicit, deterministic phase graph.
 * Every agent phase has its own prompt.
-* Every agent phase may independently select Claude Code or Codex, plus a
-  model supported by that runner.
+* Every agent phase may independently select a registered runner and a model
+  supported by that runner. Claude Code and Codex are the initial built-ins.
 * Gates, rework loops, retries, workspaces, concurrency limits, recovery,
   terminal controls, and the web dashboard remain available.
 * Existing Stokowski workflow files have a practical migration path.
@@ -74,7 +89,9 @@ without restarting its workflow from the beginning.
 * Treat phase transitions as pure data, never as an inference from model text.
 * Support +agent+, +gate+, and +terminal+ phases, including cycles and bounded
   rework.
-* Support +runner: claude+ and +runner: codex+ on every agent phase.
+* Provide the pluggable runner registry and normalized contract required by
+  link:pluggable-runner-interface-decision.adoc[the superseding runner
+  decision], with +claude+ and +codex+ as the initial built-in adapters.
 * Retain three-layer prompt assembly: global prompt, phase prompt, and
   generated lifecycle context.
 * Retain Linear polling, priority ordering, blocker checks, structured
@@ -92,7 +109,9 @@ without restarting its workflow from the beginning.
 
 * Reproducing Python module boundaries or asyncio behavior.
 * Adding issue trackers other than Linear.
-* Adding runners other than Claude Code and Codex.
+* Shipping production runners other than Claude Code and Codex. The pluggable
+  interface and its third fake conformance adapter remain initial-release
+  requirements under the superseding runner decision.
 * Inferring phase completion or transitions from unstructured LLM output.
 * Requiring PostgreSQL, Oban, or a distributed BEAM cluster for the default
   installation.
@@ -147,8 +166,8 @@ multi-project files.
 
 |Validation
 |Reject invalid phase types, missing agent prompts, bad transition targets,
-invalid runners, missing gate targets, missing entry/terminal phases, duplicate
-project names, unreadable prompt files, and invalid limits.
+unregistered runners, missing gate targets, missing entry/terminal phases,
+duplicate project names, unreadable prompt files, and invalid limits.
 |Table-driven validation tests and actionable dry-run output.
 
 |Deterministic phase graph
@@ -157,10 +176,11 @@ One successful phase execution emits at most one transition.
 |Pure transition tests plus Continuum golden-history replay tests.
 
 |Runner selection
-|Every agent phase selects +claude+ or +codex+ independently and may override
-model, timeouts, permissions, tools, session policy, and hooks.
-|The same synthetic workflow completes once with each fake runner and once
-with a mixed-runner graph.
+|Every agent phase selects a registered runner independently and may override
+model, timeouts, permissions, tools, session policy, and hooks. Built-in and
+third-party names follow the same resolution path.
+|The same synthetic workflow completes once with each built-in fake, once with
+a third conformance adapter, and once with a mixed three-runner graph.
 
 |Prompt assembly
 |Render global, phase, then generated lifecycle content with issue, phase,
@@ -205,9 +225,9 @@ on cancellation or shutdown.
 |Fake executable tests, including a spawned grandchild process.
 
 |Sessions
-|Claude may inherit a prior session or start fresh. Codex uses only
-capabilities supported by its installed CLI; unsupported session inheritance
-is reported, never silently assumed.
+|Every runner follows the normalized +inherit+, +handoff+, and +fresh+
+semantics. Native resume is capability-dependent; a missing capability uses
+the documented portable fallback or fails an explicit capability requirement.
 |Runner capability and argument-construction tests.
 
 |Retries
@@ -422,7 +442,7 @@ Stokowski.Application
 |           +-- one supervised Continuum flow per active issue
 |
 +-- Stokowski.RunnerSupervisor
-|   +-- Claude and Codex Port workers with process-tree ownership
+|   +-- registered runner workers using shared process-tree ownership
 |
 +-- Stokowski.Observability
 |   +-- event bus, metrics, bounded log buffer, terminal and web read model
@@ -1294,7 +1314,8 @@ These are bounded implementation choices, not open-ended scope:
 . Choose a prompt engine or approve a small Jinja-compatibility renderer after
   corpus tests.
 . Confirm the generic Continuum interpreter and in-memory recovery design.
-. Pin supported Claude and Codex non-interactive command protocols.
+. Confirm the pluggable runner registry and normalized contract, then pin the
+  supported Claude and Codex non-interactive command protocols behind it.
 . Select the HTTP/web stack.
 . Select the artifact bundler and final target matrix.
 . Approve or defer Drafter based on native artifact tests.
@@ -1314,8 +1335,9 @@ Fantasia 0.1.0 is ready for publication when:
   required.
 * The eight-phase example and arbitrary valid phase graphs execute
   deterministically.
-* Every agent phase has a validated prompt and independently selects Claude or
-  Codex.
+* Every agent phase has a validated prompt and independently selects a
+  registered runner. Claude and Codex use the same extension path proven by a
+  third fake conformance adapter.
 * Single-project and multi-project Stokowski workflow files pass the documented
   migration/conformance suite.
 * Linear dispatch, gates, rework, recovery, workspaces, hooks, retries,
@@ -1336,7 +1358,8 @@ small but vertical:
 . Parse and validate a minimal three-phase +agent -> gate -> terminal+
   workflow.
 . Render that agent phase's own prompt from a fake issue.
-. Execute a fake Claude or Codex adapter as a Continuum activity.
+. Execute a registered fake adapter as a Continuum activity, then prove the
+  same path with the fake Claude, Codex, and third-runner adapters.
 . Await an approval signal at the gate.
 . Emit and re-read a compatible structured tracking comment.
 . Complete the terminal transition.
