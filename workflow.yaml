@@ -168,10 +168,7 @@ server:
 #   - Agent finishes successfully  → "complete" transition
 #   - Human approves a gate        → "approve" transition
 #   - Human requests rework        → rework_to target
-# Codex agent states may override `model` and `reasoning_effort` independently.
-# The vendored b80db05 adapter always starts an ephemeral fresh session with
-# danger-full-access and approval_policy=never. Run only in a trusted checkout
-# inside an external isolation boundary; workflow states cannot weaken it.
+# Agent states may override `model` and unified `effort` independently.
 #
 states:
 
@@ -183,9 +180,10 @@ states:
     prompt: .ai/prompts/investigate.md
     linear_state: active
     runner: codex
-    reasoning_effort: high
+    model: gpt-5.6-sol
+    effort: xhigh
     max_turns: 8
-    session: fresh
+    session: inherit
     transitions:
       complete: research-review
 
@@ -208,9 +206,10 @@ states:
     prompt: .ai/prompts/implement.md
     linear_state: active
     runner: codex
-    reasoning_effort: medium
+    effort: max
+    model: gpt-5.6-luna
     max_turns: 30
-    session: fresh
+    session: inherit
     transitions:
       complete: implementation-review
 
@@ -232,8 +231,9 @@ states:
     type: agent
     prompt: .ai/prompts/review.md
     linear_state: active
-    runner: codex
-    reasoning_effort: high
+    runner: claude
+    model: opus
+    effort: xhigh
     max_turns: 10
     session: fresh              # no prior context — adversarial review
     transitions:
@@ -256,10 +256,11 @@ states:
     type: agent
     prompt: .ai/prompts/merge.md
     linear_state: active
-    runner: codex
-    reasoning_effort: low
-    max_turns: 5
-    session: fresh
+    runner: claude
+    model: sonnet
+    effort: low
+    max_turns: 3
+    session: inherit
     transitions:
       complete: done
 
