@@ -2,8 +2,8 @@ defmodule Stokowski.Workflow do
   @moduledoc """
   Parses Stokowski workflow files.
 
-  Parsed YAML remains opaque so duplicate map keys stay visible to workflow
-  validation.
+  Parsed YAML remains opaque so duplicate map keys and empty container types
+  stay visible to workflow validation.
   """
 
   @enforce_keys [:documents]
@@ -13,9 +13,18 @@ defmodule Stokowski.Workflow do
 
   @spec read(Path.t()) :: {:ok, t()} | {:error, Exception.t()}
   def read(path) do
-    case YamlElixir.read_all_from_file(path, maps_as_keywords: true) do
-      {:ok, documents} -> {:ok, %__MODULE__{documents: documents}}
-      {:error, error} -> {:error, error}
+    with {:ok, yaml} <- File.read(path),
+         {:ok, _documents} <- YamlElixir.read_all_from_string(yaml, maps_as_keywords: true) do
+      documents =
+        yaml
+        |> :yamerl_constr.string(
+          detailed_constr: true,
+          str_node_as_binary: true,
+          keep_duplicate_keys: true
+        )
+        |> Enum.map(fn {:yamerl_doc, document} -> preserve_shape(document) end)
+
+      {:ok, %__MODULE__{documents: documents}}
     end
   end
 
@@ -47,23 +56,20 @@ defmodule Stokowski.Workflow do
     |> Base.encode16(case: :lower)
   end
 
-  defp find_api_key_values(entries) when is_list(entries) do
+  defp find_api_key_values({:mapping, entries}) do
     Enum.flat_map(entries, fn
       {"api_key", value} -> [value | find_api_key_values(value)]
       {_key, value} -> find_api_key_values(value)
-      value -> find_api_key_values(value)
     end)
   end
 
+  defp find_api_key_values(entries) when is_list(entries),
+    do: Enum.flat_map(entries, &find_api_key_values/1)
+
   defp find_api_key_values(_value), do: []
 
-  defp normalize_value(values) when is_list(values) do
-    if Enum.all?(values, &match?({key, _value} when is_binary(key), &1)) do
-      normalize_mapping(values)
-    else
-      normalize_sequence(values)
-    end
-  end
+  defp normalize_value({:mapping, entries}), do: normalize_mapping(entries)
+  defp normalize_value(values) when is_list(values), do: normalize_sequence(values)
 
   defp normalize_value(value), do: {:ok, value}
 
@@ -117,4 +123,16 @@ defmodule Stokowski.Workflow do
       error -> error
     end)
   end
+
+  defp preserve_shape({:yamerl_map, :yamerl_node_map, _tag, _location, entries}) do
+    {:mapping,
+     Enum.map(entries, fn {key, value} -> {preserve_shape(key), preserve_shape(value)} end)}
+  end
+
+  defp preserve_shape({:yamerl_seq, :yamerl_node_seq, _tag, _location, values, _count}) do
+    Enum.map(values, &preserve_shape/1)
+  end
+
+  defp preserve_shape({:yamerl_null, _node, _tag, _location}), do: nil
+  defp preserve_shape({_type, _node, _tag, _location, value}), do: value
 end

@@ -61,5 +61,17 @@ defmodule Stokowski.WorkflowTest do
     assert {:error, {:duplicate_key, "runner"}} = Workflow.normalize(workflow)
   end
 
+  @tag :tmp_dir
+  test "preserves empty mapping and sequence types", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "empty-containers.yaml")
+    File.write!(path, "mapping: {}\nsequence: []\nnested:\n  - {}\n  - []\n")
+
+    assert {:ok, workflow} = Workflow.read(path)
+    assert {:ok, normalized} = Workflow.normalize(workflow)
+    assert normalized["mapping"] == %{}
+    assert normalized["sequence"] == []
+    assert normalized["nested"] == [%{}, []]
+  end
+
   defp fixture(name), do: Path.expand("../fixtures/#{name}", __DIR__)
 end

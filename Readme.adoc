@@ -67,7 +67,6 @@ Validate the Phase 0 contracts and build the unpublished checkout-independent ar
 [source,shell]
 ----
 mise exec -- mix phase0.verify
-./fantasia version
 ----
 
 The verification builds a BEAM escript, copies it to a temporary directory outside the checkout,

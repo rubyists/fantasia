@@ -4,6 +4,7 @@ inherit:
   - LC_ALL
   - PATH
   - SHELL
+  - SSH_AUTH_SOCK
   - TERM
   - TMPDIR
   - USER

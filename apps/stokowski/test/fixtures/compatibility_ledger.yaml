@@ -15,8 +15,8 @@
 - id: prompt-context
   source: vendor/stokowski@b80db05
   fixture: apps/stokowski/test/fixtures/prompts/context.yaml
-  input: nested issue context, condition, lower filter, and rework comments
-  output: nested issue values and true rework state are canonical
+  input: nested issue context, true rework state, and review comments
+  output: canonical context shape is captured for the deferred prompt engine
   disposition: correct
   adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc
 - id: tracking-order
@@ -93,6 +93,6 @@
   source: vendor/stokowski@b80db05
   fixture: apps/stokowski/test/fixtures/runners/distribution.yaml
   input: fantasia version invoked outside the checkout
-  output: self-contained BEAM escript prints the canonical application version
+  output: checkout-independent BEAM escript prints the canonical application version
   disposition: correct
   adr: documents/decisions/0005-distribution-and-release.adoc

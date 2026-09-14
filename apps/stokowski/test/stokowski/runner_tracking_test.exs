@@ -43,21 +43,46 @@ defmodule Stokowski.RunnerTrackingTest do
 
     assert Enum.at(events, 0).thread_id == "thread_fixture"
     assert Enum.at(events, 1).message == "fixture complete"
-    assert Enum.at(events, 2).usage["total_tokens"] == 19
+
+    assert Enum.at(events, 2).usage == %{
+             "cached_input_tokens" => 2,
+             "cache_write_input_tokens" => 0,
+             "input_tokens" => 12,
+             "output_tokens" => 7,
+             "reasoning_output_tokens" => 3
+           }
+
+    assert {:ok, %{message: "fatal stream failure"}} =
+             Codex.event(~s({"type":"error","message":"fatal stream failure"}))
+
+    assert {:ok, %{message: "turn failure"}} =
+             Codex.event(~s({"type":"turn.failed","error":{"message":"turn failure"}}))
   end
 
   test "latest tracking marker uses validated timestamps rather than response order" do
+    assert {:ok, tracking_fixture} =
+             YamlElixir.read_from_file(Path.join(@fixtures, "tracking/comments.yaml"))
+
+    assert length(tracking_fixture["comments"]) == 3
+
     comments = Jason.decode!(File.read!(Path.join(@fixtures, "tracking/comments.json")))
     assert {:ok, latest} = Tracking.latest(comments, "state")
     assert latest.payload["state"] == "implement"
   end
 
   test "child environment excludes ambient secrets and overlays declared values" do
-    parent = %{"PATH" => "/bin", "LINEAR_API_KEY" => "ambient-secret", "UNRELATED" => "drop"}
+    parent = %{
+      "PATH" => "/bin",
+      "SSH_AUTH_SOCK" => "/tmp/agent.sock",
+      "LINEAR_API_KEY" => "ambient-secret",
+      "UNRELATED" => "drop"
+    }
+
     declared = %{"LINEAR_API_KEY" => "$LINEAR_API_KEY", "PROJECT" => "fantasia"}
 
     assert Environment.child(parent, declared) == %{
              "PATH" => "/bin",
+             "SSH_AUTH_SOCK" => "/tmp/agent.sock",
              "LINEAR_API_KEY" => "$LINEAR_API_KEY",
              "PROJECT" => "fantasia"
            }

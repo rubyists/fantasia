@@ -60,6 +60,8 @@ defmodule Stokowski.Runner.Codex do
        }),
        do: text
 
+  defp message(%{"type" => "error", "message" => message}), do: message
+
   defp message(%{"type" => type, "error" => %{"message" => message}})
        when type in ["error", "turn.failed"],
        do: message
