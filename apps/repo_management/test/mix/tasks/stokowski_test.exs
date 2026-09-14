@@ -135,6 +135,35 @@ defmodule Mix.Tasks.StokowskiTest do
     end
   end
 
+  @tag :tmp_dir
+  test "reads runner pins from tools regardless of table order", %{tmp_dir: tmp_dir} do
+    {root, _vendor, _invocation} = fake_checkout(tmp_dir, 0)
+
+    File.write!(
+      Path.join(root, "mise.toml"),
+      "[env]\nFANTASIA_PROBE = \"1\"\n\n[tools]\ncodex = \"0.154.0\"\nclaude = \"2.1.270\"\n"
+    )
+
+    assert {_codex, "0.154.0"} = StokowskiTask.resolve_codex!(root)
+    assert {_claude, "2.1.270"} = StokowskiTask.resolve_runner!(root, "claude")
+  end
+
+  @tag :tmp_dir
+  test "accepts prerelease Claude pins", %{tmp_dir: tmp_dir} do
+    {root, _vendor, _invocation} = fake_checkout(tmp_dir, 0)
+    claude = Path.join(tmp_dir, "bin/claude")
+
+    File.write!(claude, "#!/bin/sh\nprintf '%s\\n' '2.1.270-rc.1 (Claude Code)'\n")
+    File.chmod!(claude, 0o755)
+
+    File.write!(
+      Path.join(root, "mise.toml"),
+      "[tools]\ncodex = \"0.154.0\"\nclaude = \"2.1.270-rc.1\"\n"
+    )
+
+    assert {_claude, "2.1.270-rc.1"} = StokowskiTask.resolve_runner!(root, "claude")
+  end
+
   test "provenance fixture describes both verified runners" do
     fixture = Path.expand("../../../../stokowski/test/fixtures/runners/provenance.yaml", __DIR__)
     assert {:ok, provenance} = YamlElixir.read_from_file(fixture)

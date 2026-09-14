@@ -7,7 +7,7 @@ defmodule Stokowski.Workflow do
   """
 
   @enforce_keys [:documents]
-  defstruct [:documents, unsupported_flow_mapping_aliases: []]
+  defstruct [:documents, invalid_flow_aliases: []]
 
   @opaque t :: %__MODULE__{documents: [term()]}
 
@@ -16,12 +16,12 @@ defmodule Stokowski.Workflow do
     with {:ok, yaml} <- File.read(path),
          {:ok, _documents} <- YamlElixir.read_all_from_string(yaml, maps_as_keywords: true),
          {:ok, documents} <- parse_documents(yaml) do
-      unsupported_flow_mapping_aliases = find_flow_mapping_aliases(yaml)
+      invalid_flow_aliases = find_flow_collection_aliases(yaml)
 
       {:ok,
        %__MODULE__{
          documents: documents,
-         unsupported_flow_mapping_aliases: unsupported_flow_mapping_aliases
+         invalid_flow_aliases: invalid_flow_aliases
        }}
     end
   end
@@ -49,24 +49,28 @@ defmodule Stokowski.Workflow do
              | :multiple_documents
              | {:duplicate_key, binary()}
              | {:invalid_key, term()}
-             | {:invalid_merge, :mapping_required | :flow_mapping_alias}}
+             | {:invalid_alias, binary()}
+             | {:invalid_merge, :mapping_required}}
 
   def normalize(%__MODULE__{
         documents: [document],
-        unsupported_flow_mapping_aliases: unsupported_flow_mapping_aliases
+        invalid_flow_aliases: invalid_flow_aliases
       }) do
     case normalize_value(document) do
-      {:ok, normalized} when unsupported_flow_mapping_aliases == [] ->
+      {:ok, normalized} when invalid_flow_aliases == [] ->
         {:ok, normalized}
 
       {:ok, _normalized} ->
-        {:error, {:invalid_merge, :flow_mapping_alias}}
+        invalid_alias_error(invalid_flow_aliases)
 
       {:error, {:duplicate_key, _key}} = error ->
         error
 
-      {:error, _reason} when unsupported_flow_mapping_aliases != [] ->
-        {:error, {:invalid_merge, :flow_mapping_alias}}
+      {:error, {:invalid_key, _key}} = error ->
+        error
+
+      {:error, _reason} when invalid_flow_aliases != [] ->
+        invalid_alias_error(invalid_flow_aliases)
 
       {:error, _reason} = error ->
         error
@@ -230,19 +234,99 @@ defmodule Stokowski.Workflow do
     end
   end
 
-  defp find_flow_mapping_aliases(yaml) do
-    flow_anchors = Regex.scan(~r/&([A-Za-z0-9_-]+)\s*\{/, yaml, capture: :all_but_first)
+  defp invalid_alias_error([name | _rest]), do: {:error, {:invalid_alias, name}}
 
-    Enum.flat_map(flow_anchors, fn [name] ->
-      alias = Regex.escape(name)
+  defp find_flow_collection_aliases(yaml) do
+    try do
+      tokens = tokenize(yaml)
 
-      if Regex.match?(~r/<<\s*:\s*(?:\*\s*#{alias}\b|\[[^\]]*\*\s*#{alias}\b)/s, yaml) do
-        [name]
-      else
-        []
+      flow_anchors =
+        tokens
+        |> Enum.flat_map(fn
+          {:yamerl_anchor, line, column, name} -> [{to_string(name), {line, column}}]
+          _token -> []
+        end)
+        |> Enum.reduce(%{}, fn {name, position}, anchors ->
+          Map.put(anchors, name, position)
+        end)
+        |> Enum.reduce(MapSet.new(), fn {name, position}, names ->
+          case next_node_after(tokens, position) do
+            {:collection, :flow} -> MapSet.put(names, name)
+            _other -> names
+          end
+        end)
+
+      tokens
+      |> Enum.flat_map(fn
+        {:yamerl_alias, _line, _column, name} -> [to_string(name)]
+        _token -> []
+      end)
+      |> Enum.filter(&MapSet.member?(flow_anchors, &1))
+      |> Enum.uniq()
+    rescue
+      _exception -> []
+    catch
+      _kind, _reason -> []
+    end
+  end
+
+  defp tokenize(yaml) do
+    reference = make_ref()
+
+    :yamerl_parser.string(yaml,
+      token_fun: fn token ->
+        send(self(), {reference, token})
+        :ok
       end
+    )
+
+    collect_tokens(reference, [])
+  end
+
+  defp collect_tokens(reference, tokens) do
+    receive do
+      {^reference, token} -> collect_tokens(reference, [token | tokens])
+    after
+      0 -> Enum.reverse(tokens)
+    end
+  end
+
+  defp next_node_after(tokens, position) do
+    tokens
+    |> Enum.sort_by(&token_position/1)
+    |> Enum.drop_while(&(token_position(&1) <= position))
+    |> Enum.find_value(fn
+      {:yamerl_collection_start, _line, _column, _tag, style, _kind} ->
+        {:collection, style}
+
+      {:yamerl_scalar, _line, _column, _tag, _style, _substyle, _text} ->
+        :scalar
+
+      {:yamerl_alias, _line, _column, _name} ->
+        :alias
+
+      _token ->
+        false
     end)
   end
+
+  defp token_position({_type, line, column, _rest})
+       when is_integer(line) and is_integer(column),
+       do: {line, column}
+
+  defp token_position({_type, line, column, _rest1, _rest2})
+       when is_integer(line) and is_integer(column),
+       do: {line, column}
+
+  defp token_position({_type, line, column, _rest1, _rest2, _rest3})
+       when is_integer(line) and is_integer(column),
+       do: {line, column}
+
+  defp token_position({_type, line, column, _rest1, _rest2, _rest3, _rest4})
+       when is_integer(line) and is_integer(column),
+       do: {line, column}
+
+  defp token_position(_token), do: {0, 0}
 
   defp preserve_shape({:yamerl_map, :yamerl_node_map, _tag, _location, entries}) do
     {:mapping,

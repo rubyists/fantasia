@@ -90,7 +90,14 @@ defmodule Stokowski.ProcessLifecycleTest do
 
   defp alive?(pid) do
     case System.cmd("/bin/kill", ["-0", Integer.to_string(pid)], stderr_to_stdout: true) do
-      {_output, 0} -> true
+      {_output, 0} -> not zombie?(pid)
+      {_output, _status} -> false
+    end
+  end
+
+  defp zombie?(pid) do
+    case System.cmd("ps", ["-o", "stat=", "-p", Integer.to_string(pid)], stderr_to_stdout: true) do
+      {output, 0} -> String.trim(output) |> String.starts_with?("Z")
       {_output, _status} -> false
     end
   end

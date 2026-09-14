@@ -13,6 +13,7 @@ defmodule Mix.Tasks.Stokowski do
 
   @shortdoc "Runs vendored Stokowski with the root workflow"
   @environment_reference ~r/^\$[A-Za-z_][A-Za-z0-9_]*$/
+  @exact_version ~r/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
 
   @impl Mix.Task
   def run(args) do
@@ -164,7 +165,7 @@ defmodule Mix.Tasks.Stokowski do
             {:cont, {true, found}}
 
           String.starts_with?(trimmed, "[") ->
-            {:halt, {false, found}}
+            {:cont, {false, found}}
 
           in_tools and found == nil ->
             case Regex.run(~r/^#{Regex.escape(runner)}\s*=\s*"([^"]+)"\s*$/, trimmed,
@@ -180,7 +181,7 @@ defmodule Mix.Tasks.Stokowski do
       end)
       |> elem(1)
 
-    if is_binary(version) and Regex.match?(~r/^\d+\.\d+\.\d+$/, version) do
+    if is_binary(version) and Regex.match?(@exact_version, version) do
       version
     else
       Mix.raise("mise.toml [tools] table must declare an exact #{runner} version")
@@ -211,7 +212,10 @@ defmodule Mix.Tasks.Stokowski do
     do: Regex.run(~r/^codex-cli\s+(\S+)\s*$/, output, capture: :all_but_first) || []
 
   defp observed_runner_version("claude", output),
-    do: Regex.run(~r/(?:^|\s)(\d+\.\d+\.\d+)(?:\s|$)/, output, capture: :all_but_first) || []
+    do:
+      Regex.run(~r/(?:^|\s)(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)(?:\s|$)/, output,
+        capture: :all_but_first
+      ) || []
 
   defp prepend_path(executables) do
     directories = executables |> Enum.map(&Path.dirname/1) |> Enum.uniq()

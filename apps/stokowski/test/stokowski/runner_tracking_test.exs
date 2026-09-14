@@ -105,6 +105,9 @@ defmodule Stokowski.RunnerTrackingTest do
     inherit = fixture["inherit"]
     project_allowlist = fixture["project_allowlist"]
 
+    assert MapSet.new(inherit) == MapSet.new(Environment.default_allowlist())
+    assert MapSet.new(project_allowlist) == MapSet.new(Environment.project_allowlist())
+
     parent =
       Map.new(inherit, &{&1, "inherited"})
       |> Map.merge(%{

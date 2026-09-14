@@ -12,10 +12,16 @@ defmodule Stokowski.Environment do
     STOKOWSKI_STATE
   )
 
-  @spec child(map(), map(), [String.t()]) :: map()
-  def child(parent, declared, allow \\ @default_allow) do
+  @doc false
+  def default_allowlist, do: @default_allow
+
+  @doc false
+  def project_allowlist, do: @project_allow
+
+  @spec child(map(), map()) :: map()
+  def child(parent, declared) do
     parent
-    |> Map.take(allow)
+    |> Map.take(@default_allow)
     |> Map.merge(Map.take(declared, @project_allow))
   end
 end

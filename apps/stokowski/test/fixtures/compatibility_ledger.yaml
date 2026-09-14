@@ -120,7 +120,7 @@
 - id: yaml-flow-mapping-alias
   source: vendor/stokowski@26c3cff
   fixture: apps/stokowski/test/fixtures/config/flow-mapping-alias.yaml
-  input: YAML merge alias targeting a flow-style mapping anchor
-  output: explicit parser-boundary error while flow-mapping alias support is deferred
+  input: YAML merge or ordinary alias targeting a flow-style mapping or sequence anchor
+  output: explicit invalid-alias error while flow-collection alias support is deferred
   disposition: defer
   adr: documents/decisions/0002-parser-prompt-http-and-tracking.adoc

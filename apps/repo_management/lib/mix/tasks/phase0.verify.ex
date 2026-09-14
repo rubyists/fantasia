@@ -47,27 +47,13 @@ defmodule Mix.Tasks.Phase0.Verify do
     end
   end
 
-  defp smoke_escript!(source, distribution) do
-    smoke_dir =
-      Path.join(System.tmp_dir!(), "fantasia-phase0-#{System.unique_integer([:positive])}")
+  defp smoke_escript!(artifact, distribution) do
+    [executable_name, command] = String.split(distribution["version_command"])
+    expected = "#{executable_name} #{Stokowski.version()}\n"
 
-    artifact = Path.join(smoke_dir, "fantasia")
-
-    File.mkdir_p!(smoke_dir)
-
-    try do
-      File.cp!(source, artifact)
-      File.chmod!(artifact, 0o755)
-
-      [executable_name, command] = String.split(distribution["version_command"])
-      expected = "#{executable_name} #{Stokowski.version()}\n"
-
-      case System.cmd(artifact, [command], cd: smoke_dir, stderr_to_stdout: true) do
-        {^expected, 0} -> :ok
-        {_output, _status} -> Mix.raise("packaged fantasia version smoke failed")
-      end
-    after
-      File.rm_rf!(smoke_dir)
+    case System.cmd(artifact, [command], cd: Path.dirname(artifact), stderr_to_stdout: true) do
+      {^expected, 0} -> :ok
+      {_output, _status} -> Mix.raise("packaged fantasia version smoke failed")
     end
   end
 

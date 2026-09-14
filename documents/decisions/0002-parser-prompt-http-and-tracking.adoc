@@ -17,9 +17,10 @@ then normalizes exactly one document to string-keyed immutable data. Duplicate k
 documents are errors; secrets are never included in parse diagnostics. The full-workflow fixture
 pins anchors, merge sequences, scalar types, sequences, and multiline values. Merge sequences follow
 the YAML rule that an earlier mapping wins on a duplicate key. The current yamerl release cannot
-reconstruct a flow-style mapping used as a merge alias; Fantasia reports that boundary explicitly as
-`{:invalid_merge, :flow_mapping_alias}` and defers broader flow-alias support to a parser decision
-before Phase 1 expands the workflow syntax.
+reconstruct a flow-style mapping or sequence through an alias; Fantasia reports every alias
+targeting a flow-style collection explicitly as `{:invalid_alias, anchor_name}` and defers broader
+flow-alias support to a parser decision before Phase 1 expands the workflow syntax. Detection is
+derived from yamerl's token stream, so comments and quoted scalar text do not affect this boundary.
 
 The prompt contract is nested `issue.*` data and real `is_rework` state. The Phase 0 fixture captures
 that canonical context shape and review comments, but does not claim to test rendering. Engine

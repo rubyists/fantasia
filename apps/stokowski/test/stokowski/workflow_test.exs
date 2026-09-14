@@ -100,12 +100,55 @@ defmodule Stokowski.WorkflowTest do
   end
 
   @tag :tmp_dir
-  test "reports unsupported flow-style mapping aliases explicitly", %{tmp_dir: tmp_dir} do
+  test "reports flow-style collection aliases explicitly", %{tmp_dir: tmp_dir} do
     path = Path.join(tmp_dir, "flow-mapping-alias.yaml")
     File.cp!(fixture("config/flow-mapping-alias.yaml"), path)
 
     assert {:ok, workflow} = Workflow.read(path)
-    assert {:error, {:invalid_merge, :flow_mapping_alias}} = Workflow.normalize(workflow)
+    assert {:error, {:invalid_alias, "defaults"}} = Workflow.normalize(workflow)
+  end
+
+  @tag :tmp_dir
+  test "rejects plain aliases to flow mappings and sequences", %{tmp_dir: tmp_dir} do
+    cases = [
+      {"flow-mapping-plain-alias.yaml", "mapping"},
+      {"flow-sequence-plain-alias.yaml", "sequence"}
+    ]
+
+    Enum.each(cases, fn {name, anchor} ->
+      path = Path.join(tmp_dir, name)
+      File.cp!(fixture("config/#{name}"), path)
+
+      assert {:ok, workflow} = Workflow.read(path)
+      assert {:error, {:invalid_alias, ^anchor}} = Workflow.normalize(workflow)
+    end)
+  end
+
+  @tag :tmp_dir
+  test "derives flow-alias detection from YAML tokens, not scalar text", %{tmp_dir: tmp_dir} do
+    workflows = [
+      "# see &x {p: 1}\na: &x\n  p: 1\nstate:\n  <<: *x\n  z: 3\n",
+      "note: \"use &x {p: 1} here\"\na: &x\n  p: 1\nstate:\n  <<: *x\n  z: 3\n"
+    ]
+
+    Enum.each(Enum.with_index(workflows), fn {yaml, index} ->
+      path = Path.join(tmp_dir, "flow-alias-text-#{index}.yaml")
+      File.write!(path, yaml)
+
+      assert {:ok, workflow} = Workflow.read(path)
+      assert {:ok, normalized} = Workflow.normalize(workflow)
+      assert normalized["state"] == %{"p" => 1, "z" => 3}
+    end)
+  end
+
+  @tag :tmp_dir
+  test "preserves invalid-key errors when a flow alias is also present", %{tmp_dir: tmp_dir} do
+    path = Path.join(tmp_dir, "flow-alias-invalid-key.yaml")
+
+    File.write!(path, "a: &x {p: 1}\nstate:\n  <<: *x\n1: numeric\n")
+
+    assert {:ok, workflow} = Workflow.read(path)
+    assert {:error, {:invalid_key, 1}} = Workflow.normalize(workflow)
   end
 
   @tag :tmp_dir
