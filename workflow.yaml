@@ -168,7 +168,7 @@ server:
 #   - Agent finishes successfully  → "complete" transition
 #   - Human approves a gate        → "approve" transition
 #   - Human requests rework        → rework_to target
-# Codex agent states may override `model` and `reasoning_effort` independently.
+# Agent states may override `model` and unified `effort` independently.
 #
 states:
 

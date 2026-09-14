@@ -1,0 +1,17 @@
+adapter: lc
+source: vendor/linear-cli@1cc36ffe0a0d728b36d8c5914f114ae9e99751d8
+blocked_by:
+  identifier: EXT-64
+  url: https://linear.app/the-rubyists/issue/EXT-64
+required_issue_json:
+  priority: nullable normalized priority
+  created_at: required timestamp
+  updated_at: required timestamp
+required_comment_json:
+  created_at: required timestamp
+  updated_at: nullable timestamp
+ordering:
+  - normalized priority when available
+  - creation timestamp
+  - stable identifier
+status: deferred until the unattended lc JSON contract exposes the metadata

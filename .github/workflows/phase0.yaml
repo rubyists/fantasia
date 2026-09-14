@@ -1,0 +1,42 @@
+name: Phase 0 contracts
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            architecture: x86_64
+          - os: macos-15
+            architecture: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Fetch complete submodule history
+        run: |
+          for submodule in vendor/stokowski vendor/Continuum vendor/drafter vendor/linear-cli; do
+            if test "$(git -C "$submodule" rev-parse --is-shallow-repository)" = true; then
+              git -C "$submodule" fetch --unshallow
+            fi
+          done
+      - uses: jdx/mise-action@v3
+        with:
+          install: true
+          cache: true
+      - run: test "$(uname -m)" = "${{ matrix.architecture }}"
+      - run: mise exec -- mix setup
+      - run: mise exec -- mix format --check-formatted
+      - run: mise exec -- mix test
+      - run: mise exec -- mix phase0.verify

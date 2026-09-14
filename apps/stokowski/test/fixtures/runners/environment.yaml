@@ -1,0 +1,20 @@
+inherit:
+  - HOME
+  - LANG
+  - LC_ALL
+  - PATH
+  - SHELL
+  - SSH_AUTH_SOCK
+  - TERM
+  - TMPDIR
+  - USER
+project_allowlist:
+  - LINEAR_API_KEY
+  - LINEAR_ENDPOINT
+  - LINEAR_PROJECT_SLUG
+  - STOKOWSKI_PROJECT
+  - STOKOWSKI_ARTIFACTS
+  - STOKOWSKI_ISSUE
+  - STOKOWSKI_STATE
+declared_overrides_inherited: true
+ambient_secrets: redact

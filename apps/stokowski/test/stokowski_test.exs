@@ -1,8 +1,8 @@
 defmodule StokowskiTest do
   use ExUnit.Case
-  doctest Stokowski
 
-  test "greets the world" do
-    assert Stokowski.hello() == :world
+  test "reports the application version" do
+    expected = "../../../.version.txt" |> Path.expand(__DIR__) |> File.read!() |> String.trim()
+    assert Stokowski.version() == expected
   end
 end

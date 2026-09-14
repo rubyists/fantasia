@@ -1,18 +1,8 @@
 defmodule Stokowski do
-  @moduledoc """
-  Documentation for `Stokowski`.
-  """
+  @moduledoc "Fantasia's native Stokowski-compatible runtime contracts."
 
-  @doc """
-  Hello world.
+  @version Mix.Project.config()[:version]
 
-  ## Examples
-
-      iex> Stokowski.hello()
-      :world
-
-  """
-  def hello do
-    :world
-  end
+  @spec version() :: String.t()
+  def version, do: @version
 end

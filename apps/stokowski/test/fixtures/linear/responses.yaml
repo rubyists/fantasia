@@ -1,0 +1,14 @@
+assignee: me
+viewer_id: user-fixture
+pages:
+  - has_next_page: true
+    end_cursor: cursor-1
+    nodes:
+      - identifier: EXT-57
+        assignee_id: user-fixture
+      - null
+  - has_next_page: false
+    end_cursor: null
+    errors:
+      - message: partial fixture error
+    nodes: malformed

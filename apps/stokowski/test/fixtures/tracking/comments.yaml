@@ -1,0 +1,13 @@
+comments:
+  - created_at: 2026-09-14T05:51:34Z
+    body: '<!-- stokowski:state {"state":"implement","timestamp":"2026-09-14T05:51:34Z"} -->'
+  - created_at: 2026-09-14T05:40:00Z
+    body: '<!-- fantasia:v1:state {"state":"investigate","timestamp":"2026-09-14T05:40:00Z"} -->'
+  - created_at: 2026-09-14T05:52:00Z
+    body: '<!-- fantasia:v1:state {"state":"review","timestamp":"2026-09-14T05:52:00Z"} -->'
+  - created_at: 2026-09-14T05:53:00Z
+    body: '<!-- stokowski:gate {"state":"review","status":"waiting","timestamp":"2026-09-14T05:53:00Z"} -->'
+  - created_at: invalid
+    body: '<!-- stokowski:state {not-json} -->'
+migration: dual-read-versioned-write
+selection: validated-marker-timestamp

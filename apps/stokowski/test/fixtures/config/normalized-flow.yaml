@@ -1,0 +1,5 @@
+fingerprint: sha256:fixture
+states:
+  - name: investigate
+    transitions: {complete: done}
+  - name: done

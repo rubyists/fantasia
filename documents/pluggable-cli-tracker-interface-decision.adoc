@@ -35,6 +35,11 @@ unattended CLI process boundary, and raw provider request/response shapes must
 remain private to the adapter. This replaces the original prohibition on
 generic CLI API passthrough commands.
 
+Sep 14, 2026:: ADR 0006 adds the optional +attachments+ capability and
++attach_artifact+ effect needed to preserve Stokowski evidence artifacts. The
+workspace manager collects bounded files and the effect journal owns
+idempotency; the adapter only translates and reconciles the CLI operation.
+
 == Context
 
 Fantasia's deterministic phase graph should not depend on the product-specific
@@ -168,7 +173,9 @@ The initial semantic operations are:
 * +get_item+ -- read one item with the comments and relationships needed for
   prompts, blocker checks, and recovery;
 * +set_state+ -- move an item to a configured normalized lifecycle role;
-* +append_comment+ -- add a bounded tracking or operator-visible comment; and
+* +append_comment+ -- add a bounded tracking or operator-visible comment;
+* +attach_artifact+ -- attach one bounded evidence file with a stable effect ID
+  when supported; and
 * +assign+ -- apply the configured assignee policy when the workflow requires
   it.
 
@@ -283,6 +290,7 @@ probe. The initial vocabulary includes:
 * +workflow_state_read+ and +workflow_state_write+;
 * +assignee_filter+ and +assignment+;
 * +labels+;
+* +attachments+;
 * +priority+;
 * +blockers+;
 * +projects+; and
@@ -395,6 +403,8 @@ must prove:
 * stdin is closed and an omitted body/input flag cannot leave a child waiting;
 * comment files are private, bounded, and removed on success, failure,
   cancellation, and supervisor restart;
+* a capable fake attaches a bounded artifact exactly once, while a required
+  attachment fails validation when the selected adapter lacks that capability;
 * ambiguous mutation outcomes reconcile by stable effect ID without silently
   advancing the phase twice;
 * secrets do not appear in argv, output captures, diagnostics, telemetry,

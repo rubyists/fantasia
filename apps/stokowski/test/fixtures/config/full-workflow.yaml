@@ -1,0 +1,26 @@
+defaults: &defaults
+  runner: codex
+extra: &extra
+  session: fresh
+  runner: claude
+tracker:
+  kind: linear
+  project_slug: "25967a4634d3"
+  assignee: me
+state:
+  <<: [*defaults, *extra]
+  effort: high
+states:
+  investigate:
+    runner: codex
+    session: fresh
+flags: [true, false, null, 7, 2.5]
+values:
+  - true
+  - false
+  - null
+  - 12
+  - 1.5
+  - |
+    line one
+    line two

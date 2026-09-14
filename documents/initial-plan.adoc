@@ -45,6 +45,21 @@ shapes remain contained there. Where this plan conflicts with those
 requirements, the superseding decision controls.
 ====
 
+[IMPORTANT]
+====
+Post-baseline compatibility decision:
+link:decisions/0006-post-b80-stokowski-feature-disposition.adoc[Post-b80
+Stokowski feature disposition].
+
+The Stokowski 1.0/1.1 upstream sync and later fork work are compatibility
+inputs, not incidental vendor churn. Their evidence, reports, statistics,
+routing, workflow studio, prompt, gate-recovery, run-control, session, and
+security outcomes must be implemented or intentionally corrected through the
+Fantasia owners and delivery phases recorded by that decision. Where this
+plan omits one of those later features, ADR 0006 adds it to the initial-release
+scope and controls its acceptance behavior.
+====
+
 == Purpose
 
 Port the behavior of +vendor/stokowski+ into the existing Elixir umbrella as

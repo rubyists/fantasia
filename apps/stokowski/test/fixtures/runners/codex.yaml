@@ -1,0 +1,30 @@
+fresh_argv:
+  - codex
+  - exec
+  - --dangerously-bypass-approvals-and-sandbox
+  - --json
+  - --cd
+  - WORKSPACE
+  - --model
+  - MODEL
+  - --config
+  - 'model_reasoning_effort="max"'
+  - PROMPT
+resume_argv:
+  - codex
+  - exec
+  - resume
+  - --dangerously-bypass-approvals-and-sandbox
+  - --json
+  - --model
+  - MODEL
+  - --config
+  - 'model_reasoning_effort="max"'
+  - SESSION_ID
+  - PROMPT
+stdin: closed
+session:
+  fresh_without_reference: true
+  native_resume_with_reference: true
+workflow_key: effort
+valid_effort: [low, medium, high, xhigh, max]

@@ -1,0 +1,2 @@
+a: &sequence [1, 2]
+b: *sequence

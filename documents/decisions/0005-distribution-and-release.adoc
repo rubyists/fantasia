@@ -1,0 +1,22 @@
+= ADR 0005: Distribution, terminal UI, and release coordinates
+:status: accepted
+:date: 2026-09-14
+
+== Decision
+
+The Phase 0 artifact is an unsigned, unpublished BEAM escript named `fantasia`. The smoke contract
+copies it outside the checkout and requires `fantasia version` to print the single application
+version. CI runs that contract on Linux x86_64 and macOS arm64. The source coordinate is
+`github.com/rubyists/fantasia`; `.version.txt` is the single version source consumed by both Mix
+projects. Release automation receives a dedicated follow-up.
+
+Burrito/native standalone packaging is deferred: the vendored Linear CLI patches are evidence, not
+a Fantasia contract, and cross-building does not prove the produced artifact. Drafter adoption is
+also deferred until its terminal NIF/helper loads from actual artifacts on both targets. No Phase 0
+artifact is published.
+
+== Consequences
+
+The escript proves checkout independence but requires a compatible BEAM installation. A future ADR
+may replace it only after native target execution, offline fixtures, process cleanup, and all chosen
+native components pass on both promised targets.
