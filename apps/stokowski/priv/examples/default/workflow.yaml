@@ -1,0 +1,40 @@
+schema_version: 1
+config_version: 1
+project_name: fantasia-example
+prompts:
+  global_prompt: prompts/global.md
+states:
+  investigate:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: research-review}
+  research-review:
+    type: gate
+    rework_to: investigate
+    max_rework: 3
+    transitions: {approve: implement}
+  implement:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: implementation-review}
+  implementation-review:
+    type: gate
+    rework_to: implement
+    max_rework: 5
+    transitions: {approve: code-review}
+  code-review:
+    type: agent
+    prompt: prompts/phase.md
+    session: fresh
+    transitions: {complete: merge-review}
+  merge-review:
+    type: gate
+    rework_to: implement
+    max_rework: 5
+    transitions: {approve: merge}
+  merge:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: done}
+  done:
+    type: terminal

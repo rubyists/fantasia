@@ -9,6 +9,8 @@
 # move said applications out of the umbrella.
 import Config
 
+config :continuum, trusted_modules: [:erlang, :crypto]
+
 # Sample configuration:
 #
 #     config :logger, :default_handler,

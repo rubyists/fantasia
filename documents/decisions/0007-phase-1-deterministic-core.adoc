@@ -1,0 +1,41 @@
+= Phase 1 deterministic core
+
+== Status
+
+Accepted for EXT-58.
+
+== Decision
+
+Fantasia keeps the lossless `Stokowski.Workflow` YAML decoder as the parser
+boundary and adds `Stokowski.Config` as the normalization boundary. A
+configuration snapshot contains the selected workflow, entry phase, graph,
+resolved ordered prompt bodies, routing decision, capability declarations,
+and schema/config versions. Tracker credentials, environment values, absolute
+checkout paths, and timestamps are excluded. The SHA-256 fingerprint is made
+from canonical sorted data and therefore changes when a prompt, route, graph,
+or selected workflow changes.
+
+Canonical YAML and legacy `WORKFLOW.md` front matter are accepted. A legacy
+markdown body is preserved in the snapshot, but a document without a
+deterministic phase graph returns an actionable migration diagnostic; state
+transitions are never inferred from prose or provider state.
+
+== Prompt and report boundary
+
+The native prompt implementation intentionally supports only the subset used
+by the vendored corpus: dotted `issue.*` values, flat aliases, permissive
+missing values, `if`/`else`/`endif`, and the `lower` filter. It does not execute
+template code. Prompt assembly is global stack, phase body, and generated
+Fantasia lifecycle/report contract. Structured reports are decoded into
+provider-neutral values and rendered by Fantasia so model prose cannot hide
+missing evidence.
+
+== Tracking and history
+
+Tracking readers accept legacy `stokowski:` and `fantasia:v1:` markers,
+validate embedded timestamps, and order equal timestamps by normalized comment
+identity/content. Writers require timestamp and effect identity as arguments
+and emit only Fantasia v1 markers. The generic Continuum flow journals its
+entire normalized input before invoking the pure reducer and calls one fixed
+fake activity boundary. The Phase 0 flow and its history remain unchanged;
+incompatible future flow changes require a Continuum workflow version bump.

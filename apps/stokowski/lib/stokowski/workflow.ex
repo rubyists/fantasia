@@ -14,7 +14,15 @@ defmodule Stokowski.Workflow do
   @spec read(Path.t()) :: {:ok, t()} | {:error, term()}
   def read(path) do
     with {:ok, yaml} <- File.read(path),
-         {:ok, _documents} <- YamlElixir.read_all_from_string(yaml, maps_as_keywords: true),
+         {:ok, workflow} <- parse(yaml) do
+      {:ok, workflow}
+    end
+  end
+
+  @doc "Parse YAML from a string while retaining Phase 0's lossless shape."
+  @spec parse(binary()) :: {:ok, t()} | {:error, term()}
+  def parse(yaml) when is_binary(yaml) do
+    with {:ok, _documents} <- YamlElixir.read_all_from_string(yaml, maps_as_keywords: true),
          {:ok, documents} <- parse_documents(yaml) do
       invalid_flow_aliases = find_flow_collection_aliases(yaml)
 
