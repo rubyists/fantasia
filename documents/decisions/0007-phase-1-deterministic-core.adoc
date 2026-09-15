@@ -1,0 +1,72 @@
+= Phase 1 deterministic core
+
+== Status
+
+Accepted for EXT-58.
+
+== Decision
+
+Fantasia keeps the lossless `Stokowski.Workflow` YAML decoder as the parser
+boundary and adds `Stokowski.Config` as the normalization boundary. A
+configuration snapshot contains the selected workflow, entry phase, graph,
+resolved ordered prompt bodies, routing decision, capability declarations,
+and schema/config versions. Tracker credentials, environment values, absolute
+checkout paths, and timestamps are excluded. The SHA-256 fingerprint is made
+from canonical sorted data and therefore changes when a prompt, route, graph,
+or selected workflow changes.
+
+Canonical YAML and legacy `WORKFLOW.md` front matter are accepted. A legacy
+markdown body is preserved in the snapshot, but a document without a
+deterministic phase graph returns an actionable migration diagnostic; state
+transitions are never inferred from prose or provider state.
+
+== Prompt and report boundary
+
+The native prompt implementation intentionally supports only the subset used
+by the vendored corpus: dotted `issue.*` values, flat aliases, permissive
+missing values, `if`/`else`/`endif`, and the `lower` filter. It does not execute
+template code. Prompt assembly is global stack, phase body, and generated
+Fantasia lifecycle/report contract. Structured reports are decoded into
+provider-neutral values and rendered by Fantasia so model prose cannot hide
+missing evidence.
+
+== Tracking and history
+
+Tracking readers accept legacy `stokowski:` and `fantasia:v1:` markers,
+validate embedded timestamps, and order equal timestamps by normalized comment
+identity/content. Writers require timestamp and effect identity as arguments
+and emit only Fantasia v1 markers. The generic Continuum flow journals its
+entire normalized input before invoking the pure reducer and calls one fixed
+fake activity boundary. The Phase 0 flow and its history remain unchanged;
+incompatible future flow changes require a Continuum workflow version bump.
+
+== Rework and deterministic helper decisions
+
+`max_rework` is a per-gate limit on rework transitions, not a workflow-global
+run limit. `run` remains a one-based lifecycle counter and increments on every
+rework, while the reducer stores a counter keyed by the gate name. A gate with
+`max_rework: 0` escalates on its first rework; a gate with `N` permits `N`
+rework transitions before escalation. This keeps budgets independent when a
+workflow contains multiple gates and makes the zero value explicit.
+
+The reducer's effect identity uses an audited `Stokowski.Deterministic` helper
+for deterministic external-term encoding and SHA-256. Only that narrow owned
+helper and `:crypto` are trusted by Continuum; the complete `:erlang` module is
+not allowlisted.
+
+Declaration order is loader metadata carried onto each selected workflow. It
+is never mixed into a bare state map, so external state-only workflow files do
+not grow a phantom `__phase_order__` phase and inline named workflows retain
+their authored order.
+
+== Ash domain/resource/action disposition
+
+Ash is explicitly deferred for this Phase 1 core. Continuum owns execution and
+replay, and the pure `Stokowski.Domain` structs are the provider-neutral input
+to that reducer. There is no persistent or queryable operational domain in
+this slice, so introducing Ash resources and actions would duplicate the
+durable workflow boundary without adding a storage contract. The initial plan
+places Ash behind a separate ADR for precisely this case. A future persistent
+operational domain may adopt an Ash domain/resources/actions layer, with an
+explicit migration boundary from these immutable values; it must not replace
+the pure reducer or make replay depend on Ash state.
