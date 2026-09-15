@@ -26,7 +26,7 @@ defmodule Stokowski.Config do
         if Path.extname(path) in [".yaml", ".yml"] do
           with {:ok, workflow} <- Stokowski.Workflow.read(path),
                {:ok, raw} <- Stokowski.Workflow.normalize(workflow) do
-            {:ok, Map.put(raw, "__phase_order__", declaration_order(workflow)), ""}
+            {:ok, with_loader_metadata(raw, workflow), ""}
           end
         else
           parse_markdown(content)
@@ -41,7 +41,7 @@ defmodule Stokowski.Config do
       else
         with {:ok, workflow} <- Stokowski.Workflow.parse(content),
              {:ok, raw} <- Stokowski.Workflow.normalize(workflow) do
-          {:ok, raw, ""}
+          {:ok, with_loader_metadata(raw, workflow), ""}
         end
       end
     end
@@ -51,7 +51,7 @@ defmodule Stokowski.Config do
         [front_matter, body] ->
           with {:ok, workflow} <- Stokowski.Workflow.parse(front_matter),
                {:ok, raw} <- Stokowski.Workflow.normalize(workflow) do
-            {:ok, Map.put(raw, "__phase_order__", declaration_order(workflow)), String.trim(body)}
+            {:ok, with_loader_metadata(raw, workflow), String.trim(body)}
           end
 
         _ ->
@@ -61,17 +61,61 @@ defmodule Stokowski.Config do
       end
     end
 
-    defp declaration_order(%Stokowski.Workflow{documents: [{:mapping, entries}]}) do
-      case find_mapping(entries, "states") do
-        {:mapping, state_entries} ->
-          Enum.map(state_entries, fn {name, _value} -> to_string(name) end)
+    defp with_loader_metadata(raw, workflow) do
+      %{phase_order: phase_order, workflow_phase_orders: workflow_phase_orders} =
+        declaration_metadata(workflow)
+
+      raw
+      |> Map.put("__phase_order__", phase_order)
+      |> Map.put("__workflow_phase_orders__", workflow_phase_orders)
+    end
+
+    defp declaration_metadata(%Stokowski.Workflow{documents: [{:mapping, entries}]}) do
+      direct_states = find_mapping(entries, "states")
+      workflows = find_mapping(entries, "workflows")
+
+      phase_order =
+        case direct_states do
+          {:mapping, state_entries} -> mapping_keys(state_entries)
+          _ -> bare_state_order(entries, workflows)
+        end
+
+      workflow_phase_orders =
+        case workflows do
+          {:mapping, workflow_entries} ->
+            Map.new(workflow_entries, fn {name, value} ->
+              {to_string(name), mapping_keys(find_mapping_value(value, "states"))}
+            end)
+
+          _ ->
+            %{}
+        end
+
+      %{phase_order: phase_order, workflow_phase_orders: workflow_phase_orders}
+    end
+
+    defp declaration_metadata(_), do: %{phase_order: [], workflow_phase_orders: %{}}
+
+    defp bare_state_order(entries, nil) do
+      entries
+      |> Enum.flat_map(fn
+        {name, {:mapping, state_entries}} ->
+          if find_mapping(state_entries, "type"), do: [to_string(name)], else: []
 
         _ ->
           []
-      end
+      end)
     end
 
-    defp declaration_order(_), do: []
+    defp bare_state_order(_entries, _workflows), do: []
+
+    defp mapping_keys({:mapping, entries}),
+      do: Enum.map(entries, fn {name, _value} -> to_string(name) end)
+
+    defp mapping_keys(_), do: []
+
+    defp find_mapping_value({:mapping, entries}, wanted), do: find_mapping(entries, wanted)
+    defp find_mapping_value(_value, _wanted), do: nil
 
     defp find_mapping([{key, value} | _rest], wanted) when key == wanted, do: value
     defp find_mapping([_ | rest], wanted), do: find_mapping(rest, wanted)
@@ -174,6 +218,7 @@ defmodule Stokowski.Config do
 
   def fingerprint(data) when is_map(data) do
     data
+    |> fingerprint_data()
     |> canonicalize()
     |> :erlang.term_to_binary([:deterministic])
     |> then(&:crypto.hash(:sha256, &1))
@@ -250,6 +295,9 @@ defmodule Stokowski.Config do
     external = load_external_workflows(workflow_dir)
     inline = map_get(project, "workflows", map_get(raw, "workflows", %{}))
     states = map_get(project, "states", map_get(raw, "states", %{}))
+    phase_orders = map_get(raw, "__workflow_phase_orders__", %{})
+
+    inline = attach_inline_phase_orders(inline, phase_orders)
 
     workflows =
       external
@@ -312,7 +360,7 @@ defmodule Stokowski.Config do
           |> Enum.reduce(%{}, fn path, acc ->
             with {:ok, normalized, _body} <- Loader.read(path) do
               name = Path.basename(path) |> String.split(".") |> List.first()
-              Map.put(acc, name, normalized)
+              Map.put(acc, name, external_workflow(normalized))
             else
               _ -> acc
             end
@@ -327,7 +375,8 @@ defmodule Stokowski.Config do
        when is_map(states) and map_size(states) > 0 do
     workflow = %{
       "states" => states,
-      "prompts" => map_get(project, "prompts", map_get(raw, "prompts", %{}))
+      "prompts" => map_get(project, "prompts", map_get(raw, "prompts", %{})),
+      "__phase_order__" => map_get(raw, "__phase_order__", [])
     }
 
     Map.put_new(workflows, "default", workflow)
@@ -342,13 +391,15 @@ defmodule Stokowski.Config do
            if(requested,
              do: {:ok, to_string(requested), %{default: false, label: :explicit}},
              else: route(map_get(project, "routing", map_get(raw, "routing", %{})), labels)
-           ),
-         workflow_raw when is_map(workflow_raw) <- Map.get(workflows, routed) do
-      {:ok, routed, workflow_raw, Map.put(decision, :workflow, routed)}
-    else
-      nil ->
-        {:error, {:unknown_workflow, requested}}
+           ) do
+      case Map.get(workflows, routed) do
+        workflow_raw when is_map(workflow_raw) ->
+          {:ok, routed, workflow_raw, Map.put(decision, :workflow, routed)}
 
+        nil ->
+          {:error, {:unknown_workflow, routed}}
+      end
+    else
       {:error, _} = error ->
         if map_size(workflows) == 1 do
           [{name, workflow_raw}] = Map.to_list(workflows)
@@ -360,7 +411,12 @@ defmodule Stokowski.Config do
   end
 
   defp build_graph(workflow_raw) do
-    raw_states = map_get(workflow_raw, "states", workflow_raw)
+    raw_states =
+      case map_get(workflow_raw, "states") do
+        states when is_map(states) -> states
+        _ -> Map.drop(workflow_raw, ["__phase_order__", "__workflow_phase_orders__"])
+      end
+
     phase_order = map_get(workflow_raw, "__phase_order__", [])
     ordered_entries = ordered_entries(raw_states, phase_order)
 
@@ -487,7 +543,8 @@ defmodule Stokowski.Config do
 
       _ ->
         candidate = Path.expand(path, workflow_dir)
-        relative = Path.relative_to(candidate, Path.expand(workflow_dir))
+        root = Path.expand(workflow_dir)
+        relative = Path.relative_to(candidate, root, force: true)
         absolute? = Path.type(path) == :absolute
         outside? = relative == ".." or String.starts_with?(relative, "../")
 
@@ -729,11 +786,11 @@ defmodule Stokowski.Config do
   defp optional(""), do: :unavailable
   defp optional(value), do: value
 
-  defp positive_or_unavailable(value) when is_integer(value) and value > 0, do: value
+  defp positive_or_unavailable(value) when is_integer(value) and value >= 0, do: value
 
   defp positive_or_unavailable(value) when is_binary(value) do
     case Integer.parse(value) do
-      {int, ""} when int > 0 -> int
+      {int, ""} when int >= 0 -> int
       _ -> :unavailable
     end
   end
@@ -785,4 +842,38 @@ defmodule Stokowski.Config do
 
   defp ordered_entries(states, _order) when is_map(states), do: Map.to_list(states)
   defp ordered_entries(_states, _order), do: []
+
+  defp attach_inline_phase_orders(inline, orders) when is_map(inline) and is_map(orders) do
+    Map.new(inline, fn {name, workflow} ->
+      order = Map.get(orders, to_string(name), [])
+
+      if is_map(workflow),
+        do: {name, Map.put(workflow, "__phase_order__", order)},
+        else: {name, workflow}
+    end)
+  end
+
+  defp attach_inline_phase_orders(inline, _orders), do: inline
+
+  defp external_workflow(normalized) do
+    phase_order = map_get(normalized, "__phase_order__", [])
+    states = map_get(normalized, "states")
+
+    if is_map(states) do
+      normalized
+      |> Map.delete("__workflow_phase_orders__")
+      |> Map.put("__phase_order__", phase_order)
+    else
+      %{
+        "states" => Map.drop(normalized, ["__phase_order__", "__workflow_phase_orders__"]),
+        "__phase_order__" => phase_order
+      }
+    end
+  end
+
+  defp fingerprint_data(data) do
+    data
+    |> Map.delete(:routing)
+    |> Map.delete("routing")
+  end
 end

@@ -67,7 +67,7 @@ defmodule Stokowski.FlowPhase1Test do
       "straight-through" => {:completed, "done", 1},
       "approval" => {:completed, "done", 1},
       "rework" => {:completed, "done", 2},
-      "escalation" => {:escalated, "review", 2},
+      "escalation" => {:escalated, "review", 3},
       "external-terminal" => {:cancelled, "work", 1}
     }
 

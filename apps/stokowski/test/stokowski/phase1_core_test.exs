@@ -107,18 +107,61 @@ defmodule Stokowski.Phase1CoreTest do
 
   test "gate rework increments run and escalates at the configured ceiling" do
     snapshot = snapshot()
-    gate = %Domain.PhaseState{phase: "review", run: 1, attempt: 2}
+    gate = %Domain.PhaseState{phase: "review", run: 1, attempt: 2, status: :waiting}
     assert {:ok, work, effects} = PhaseMachine.reduce(snapshot, gate, Domain.rework("fix this"))
     assert work.phase == "work"
     assert work.run == 2
+    assert work.rework_counts == %{"review" => 1}
     assert Enum.map(effects, & &1.kind) == [:rework, :dispatch]
 
-    ceiling = %{gate | run: 2}
+    assert {:ok, work_again, _effects} =
+             PhaseMachine.reduce(
+               snapshot,
+               %{work | phase: "review", status: :waiting},
+               Domain.rework("again")
+             )
+
+    assert work_again.run == 3
+    assert work_again.rework_counts == %{"review" => 2}
+
+    ceiling = %{work_again | phase: "review", status: :waiting}
 
     assert {:ok, escalated, [%Domain.RequiredEffect{kind: :escalate}]} =
-             PhaseMachine.reduce(snapshot, ceiling, Domain.rework("again"))
+             PhaseMachine.reduce(snapshot, ceiling, Domain.rework("third time"))
 
     assert escalated.status == :escalated
+  end
+
+  test "rework budgets are independent per gate and zero means no rework" do
+    snapshot = snapshot()
+    other_gate = %{snapshot.graph["review"] | name: "other-review", max_rework: 1}
+    snapshot = %{snapshot | graph: Map.put(snapshot.graph, "other-review", other_gate)}
+
+    state = %Domain.PhaseState{
+      phase: "review",
+      run: 8,
+      status: :waiting,
+      rework_counts: %{"other-review" => 1}
+    }
+
+    assert {:ok, next, _effects} =
+             PhaseMachine.reduce(snapshot, state, Domain.rework("review only"))
+
+    assert next.rework_counts == %{"other-review" => 1, "review" => 1}
+
+    zero = %{snapshot | graph: Map.put(snapshot.graph, "review", %{other_gate | max_rework: 0})}
+
+    assert {:ok, escalated, [%Domain.RequiredEffect{kind: :escalate}]} =
+             PhaseMachine.reduce(zero, %{state | rework_counts: %{}}, Domain.rework("no retry"))
+
+    assert escalated.status == :escalated
+  end
+
+  test "atom-keyed event maps retain their payload and support escalation" do
+    assert {:ok, %Domain.GateDecision{decision: :rework, feedback: "fix", actor: "Ada"}} =
+             Domain.normalize_event(%{type: "rework", feedback: "fix", actor: "Ada"})
+
+    assert {:ok, %Domain.GateDecision{decision: :escalate}} = Domain.normalize_event(:escalate)
   end
 
   test "prompt rendering supports nested and flat values without code evaluation" do
@@ -208,14 +251,19 @@ defmodule Stokowski.Phase1CoreTest do
         Domain.agent_completed(),
         Domain.rework("one"),
         Domain.agent_completed(),
-        Domain.rework("two")
+        Domain.rework("two"),
+        Domain.agent_completed(),
+        Domain.rework("three")
       ]
     }
 
     assert {:ok, escalation_id} = Continuum.Test.start_synchronous(Stokowski.Flow, escalation)
 
     assert {:ok,
-            %{state: :completed, result: {:ok, %{state: %Domain.PhaseState{status: :escalated}}}}} =
+            %{
+              state: :completed,
+              result: {:ok, %{state: %Domain.PhaseState{status: :escalated, run: 3}}}
+            }} =
              Continuum.await(escalation_id, 1_000)
   end
 
@@ -227,6 +275,24 @@ defmodule Stokowski.Phase1CoreTest do
 
     assert {:ok,
             %{state: :completed, result: {:ok, %{state: %Domain.PhaseState{status: :cancelled}}}}} =
+             Continuum.await(run_id, 1_000)
+  end
+
+  test "an awaiting flow continues through rework after returning to an agent" do
+    input = %{
+      snapshot: snapshot(),
+      events: [Domain.agent_completed(), Domain.rework("fix")],
+      await_signal: true
+    }
+
+    assert {:ok, run_id} = Continuum.Test.start_synchronous(Stokowski.Flow, input)
+    assert {:error, :timeout} = Continuum.await(run_id, 100)
+    assert :ok = Continuum.Test.inject_signal(run_id, :phase_event, Domain.agent_completed())
+    assert {:error, :timeout} = Continuum.await(run_id, 100)
+    assert :ok = Continuum.Test.inject_signal(run_id, :phase_event, Domain.approve())
+
+    assert {:ok,
+            %{state: :completed, result: {:ok, %{state: %Domain.PhaseState{status: :completed}}}}} =
              Continuum.await(run_id, 1_000)
   end
 

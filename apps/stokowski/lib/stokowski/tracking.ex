@@ -2,6 +2,7 @@ defmodule Stokowski.Tracking do
   @moduledoc "Deterministic dual-read tracking codec with Fantasia v1 writers."
 
   @marker ~r/<!--\s*(?<namespace>stokowski:|fantasia:v1:)(?<kind>state|gate)\s+(?<json>\{.*?\})\s*-->/s
+  @machine_marker ~r/<!--\s*(?:stokowski:|fantasia:v1:)/
 
   @doc "Return the newest valid marker of a requested kind."
   @spec latest([map()], String.t()) :: {:ok, map()} | :none
@@ -220,7 +221,7 @@ defmodule Stokowski.Tracking do
 
         "gate" ->
           is_binary(Map.get(payload, "state")) and Map.get(payload, "state") != "" and
-            Map.get(payload, "status") in ~w(waiting approved rework escalated)
+            valid_gate_payload_status?(Map.get(payload, "status"), namespace)
 
         _ ->
           false
@@ -291,9 +292,15 @@ defmodule Stokowski.Tracking do
   end
 
   defp machine_comment?(comment),
-    do:
-      String.contains?(body_of(comment), "<!-- stokowski:") or
-        String.contains?(body_of(comment), "<!-- fantasia:v1:")
+    do: Regex.match?(@machine_marker, body_of(comment))
+
+  defp valid_gate_payload_status?(status, "stokowski"),
+    do: is_binary(status) and status != ""
+
+  defp valid_gate_payload_status?(status, "fantasia:v1"),
+    do: status in ~w(waiting approved rework escalated)
+
+  defp valid_gate_payload_status?(_status, _namespace), do: false
 
   defp after_cutoff?(_created_at, nil), do: true
   defp after_cutoff?(nil, _cutoff), do: false

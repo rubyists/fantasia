@@ -4,36 +4,10 @@ defmodule Stokowski.Prompt do
   use Continuum.Pure
 
   alias Stokowski.Domain.{Issue, Phase, PhaseState, WorkflowSnapshot}
+  alias Stokowski.Report
 
-  @report_contract [
-    "### Evidence",
-    "",
-    "Write screenshots, recordings, and exported evidence under `$STOKOWSKI_ARTIFACTS`.",
-    "Do not leave evidence files elsewhere in the repository.",
-    "",
-    "### Structured reporting",
-    "",
-    "Write `.stokowski/report.json` in the workspace root before finishing.",
-    "It must be valid JSON with these fields:",
-    "",
-    "- `summary`: concise result",
-    "- `headline`: the single most important result",
-    "- `classification`: the kind of work performed",
-    "- `confidence`: honest confidence in the conclusion",
-    "- `key_points`: the evidence chain behind the recommendation",
-    "- `claims`: claim, evidence, source, and confidence for each finding",
-    "- `data_sources`: source and how it was independently verified",
-    "- `verification`: command, pass/fail result, and detail",
-    "- `artifacts`: bounded evidence files and captions",
-    "- `assumptions`: decisions made without direct evidence",
-    "- `risks`: remaining failure modes",
-    "- `open_questions`: unresolved questions",
-    "- `verdict`: the supported recommendation",
-    "- `next`: what should happen next",
-    "- `next_steps`: ordered concrete actions",
-    "",
-    "Do not omit uncertainty or replace evidence with model confidence."
-  ]
+  @report_contract Report.contract()
+  @machine_marker ~r/<!--\s*(?:stokowski:|fantasia:v1:)/
 
   @token ~r/(\{\{.*?\}\}|\{%.*?%\})/s
 
@@ -393,8 +367,7 @@ defmodule Stokowski.Prompt do
     |> Enum.sort_by(&{&1.created_at, &1.author, &1.body})
   end
 
-  defp machine_comment?(body),
-    do: String.contains?(body, "<!-- stokowski:") or String.contains?(body, "<!-- fantasia:v1:")
+  defp machine_comment?(body), do: Regex.match?(@machine_marker, body)
 
   defp author_value(comment) do
     direct = Map.get(comment, :author, Map.get(comment, "author", :unavailable))
@@ -444,6 +417,13 @@ defmodule Stokowski.Prompt do
     end)
   end
 
-  defp truncate(value, max) when byte_size(value) <= max, do: value
-  defp truncate(value, max), do: binary_part(value, 0, max) <> "\n\n[comments truncated]"
+  defp truncate(value, max) when is_integer(max) and max >= 0 do
+    if String.length(value) <= max do
+      value
+    else
+      String.slice(value, 0, max) <> "\n\n[comments truncated]"
+    end
+  end
+
+  defp truncate(value, _max), do: value
 end

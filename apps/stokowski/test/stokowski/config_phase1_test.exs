@@ -31,6 +31,96 @@ defmodule Stokowski.ConfigPhase1Test do
     assert {:ok, "feature", %{default: true}} = Config.route(raw, [])
   end
 
+  test "routing provenance does not change the resolved workflow fingerprint" do
+    yaml = """
+    routing:
+      default: feature
+      rules:
+        - {label: bug, workflow: feature}
+    workflows:
+      feature:
+        states:
+          work: {type: agent, prompt: phase.md, transitions: {complete: done}}
+          done: {type: terminal}
+    """
+
+    opts = [prompt_contents: %{"phase.md" => "phase"}]
+    assert {:ok, routed} = Config.from_yaml(yaml, Keyword.put(opts, :labels, ["bug"]))
+    assert {:ok, explicit} = Config.from_yaml(yaml, Keyword.put(opts, :workflow, "feature"))
+    assert routed.graph == explicit.graph
+    assert routed.routing != explicit.routing
+    assert routed.fingerprint == explicit.fingerprint
+  end
+
+  test "reports the routed workflow name when a route is undefined" do
+    yaml = """
+    routing:
+      default: missing
+    workflows:
+      defined:
+        states:
+          work: {type: agent, prompt: phase.md, transitions: {complete: done}}
+          done: {type: terminal}
+    """
+
+    assert {:error, {:unknown_workflow, "missing"}} =
+             Config.from_yaml(yaml, prompt_contents: %{"phase.md" => "phase"})
+  end
+
+  test "loader metadata preserves declaration order for named inline workflows" do
+    yaml = """
+    routing: {default: custom}
+    workflows:
+      custom:
+        states:
+          done: {type: terminal}
+          work: {type: agent, prompt: phase.md, transitions: {complete: done}}
+    """
+
+    assert {:ok, raw, ""} = Config.Loader.parse(yaml)
+    assert raw["__workflow_phase_orders__"]["custom"] == ["done", "work"]
+    assert {:ok, snapshot} = Config.from_yaml(yaml, prompt_contents: %{"phase.md" => "phase"})
+    assert map_size(snapshot.graph) == 2
+    refute Map.has_key?(snapshot.graph, "__phase_order__")
+  end
+
+  @tag :tmp_dir
+  test "rejects prompt paths outside the workflow directory", %{tmp_dir: tmp_dir} do
+    yaml = """
+    states:
+      work: {type: agent, prompt: ../outside.md, transitions: {complete: done}}
+      done: {type: terminal}
+    """
+
+    assert {:error, {:prompt_path_outside_workflow, "../outside.md"}} =
+             Config.from_yaml(yaml, workflow_dir: Path.join(tmp_dir, "workflow"))
+  end
+
+  @tag :tmp_dir
+  test "preserves external declaration order without treating loader metadata as a phase",
+       %{tmp_dir: tmp_dir} do
+    workflow = Path.join(tmp_dir, "workflow.yaml")
+    external_dir = Path.join(tmp_dir, "workflows")
+    File.mkdir_p!(external_dir)
+    File.write!(Path.join(tmp_dir, "prompt.md"), "phase")
+
+    File.write!(
+      Path.join(external_dir, "ordered.yaml"),
+      """
+      done: {type: terminal}
+      work: {type: agent, prompt: prompt.md, transitions: {complete: done}}
+      """
+    )
+
+    File.write!(workflow, "routing: {default: ordered}\n")
+
+    assert {:ok, raw, ""} = Config.Loader.read(Path.join(external_dir, "ordered.yaml"))
+    assert raw["__phase_order__"] == ["done", "work"]
+    assert {:ok, snapshot} = Config.load(workflow)
+    assert map_size(snapshot.graph) == 2
+    refute Map.has_key?(snapshot.graph, "__phase_order__")
+  end
+
   test "specialized examples keep grounding as a fresh data-defined phase" do
     for kind <- ["bug-fix", "feature", "exploration"] do
       path = Path.expand("../../priv/examples/#{kind}/workflow.yaml", __DIR__)
@@ -72,6 +162,22 @@ defmodule Stokowski.ConfigPhase1Test do
              )
 
     refute first.fingerprint == changed.fingerprint
+  end
+
+  test "preserves a zero rework limit in the normalized phase" do
+    yaml = """
+    states:
+      work: {type: agent, prompt: phase.md, transitions: {complete: review}}
+      review:
+        type: gate
+        rework_to: work
+        max_rework: 0
+        transitions: {approve: done}
+      done: {type: terminal}
+    """
+
+    assert {:ok, snapshot} = Config.from_yaml(yaml, prompt_contents: %{"phase.md" => "phase"})
+    assert snapshot.graph["review"].max_rework == 0
   end
 
   test "legacy markdown without a graph gives a migration diagnostic" do

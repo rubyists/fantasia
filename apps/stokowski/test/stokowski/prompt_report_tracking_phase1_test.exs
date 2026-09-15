@@ -57,7 +57,13 @@ defmodule Stokowski.PromptReportTrackingPhase1Test do
       Prompt.assemble(snapshot, issue, "investigate",
         comments: [
           %{id: "2", body: "later", createdAt: "2026-01-02T00:00:00Z", author: "Ada"},
-          %{id: "1", body: "earlier", createdAt: "2026-01-01T00:00:00Z", author: "Lin"}
+          %{id: "1", body: "earlier", createdAt: "2026-01-01T00:00:00Z", author: "Lin"},
+          %{
+            id: "machine",
+            body:
+              ~s(<!--fantasia:v1:state {"schema":1,"state":"machine","timestamp":"2026-01-03T00:00:00Z"} -->),
+            createdAt: "2026-01-03T00:00:00Z"
+          }
         ]
       )
 
@@ -66,6 +72,7 @@ defmodule Stokowski.PromptReportTrackingPhase1Test do
     assert prompt =~ "## Lifecycle Context"
     assert prompt =~ "### Structured reporting"
     assert :binary.match(prompt, "earlier") < :binary.match(prompt, "later")
+    refute prompt =~ "machine"
   end
 
   test "report projection exposes unsupported evidence instead of hiding it" do
@@ -78,6 +85,62 @@ defmodule Stokowski.PromptReportTrackingPhase1Test do
     assert output =~ "Needs rework"
     assert output =~ "A claim"
     assert output =~ "Findings"
+  end
+
+  test "report rendering handles next steps, scalar maps, and missing captions" do
+    output =
+      Report.render(%{
+        "verdict" => "approve",
+        "summary" => %{"result" => "ready"},
+        "next_steps" => ["run tests", "merge the change"],
+        "artifacts" => [%{"file" => "screenshot.png"}]
+      })
+
+    assert output =~ "> 1. run tests"
+    assert output =~ "> 2. merge the change"
+    assert output =~ "result"
+    assert output =~ "[screenshot.png](screenshot.png)"
+    refute output =~ "[](screenshot.png)"
+  end
+
+  @tag :tmp_dir
+  test "report loading falls back to a fenced JSON block", %{tmp_dir: tmp_dir} do
+    fallback = """
+    Runner output:
+    ```json
+    {"verdict":"complete","summary":"finished"}
+    ```
+    """
+
+    assert {:ok, report} = Report.load(tmp_dir, fallback)
+    assert report.verdict == "complete"
+    assert report.summary == "finished"
+  end
+
+  test "comment truncation keeps multibyte prompt content valid" do
+    snapshot = %Domain.WorkflowSnapshot{
+      workflow: "test",
+      entry_phase: "work",
+      graph: %{},
+      prompts: %{},
+      routing: %{},
+      schema_version: 1,
+      config_version: 1,
+      fingerprint: "test"
+    }
+
+    lifecycle =
+      Prompt.lifecycle_data(
+        snapshot,
+        %Domain.Issue{id: "id", identifier: "EXT-1", title: "Title"},
+        %Domain.PhaseState{phase: "work"},
+        nil,
+        comments: [%{"id" => "1", "body" => String.duplicate("é", 20)}],
+        max_chars: 10
+      )
+
+    assert String.valid?(lifecycle["comments"])
+    assert String.valid?(Prompt.lifecycle_markdown(lifecycle))
   end
 
   test "tracking dual-read is stable and writers require data" do
@@ -98,10 +161,16 @@ defmodule Stokowski.PromptReportTrackingPhase1Test do
         "createdAt" => "2026-01-02T00:00:00Z",
         "body" => "ordinary feedback",
         "user" => %{"displayName" => "Ada"}
+      },
+      %{
+        "id" => "d",
+        "createdAt" => "2026-01-02T00:00:01Z",
+        "body" =>
+          ~s(<!--fantasia:v1:state {"schema":1,"state":"machine","timestamp":"2026-01-02T00:00:01Z"} -->)
       }
     ]
 
-    assert {:ok, marker} = Tracking.latest(comments, "state")
+    assert {:ok, marker} = Tracking.latest(Enum.take(comments, 3), "state")
     assert marker.payload["state"] == "new"
     assert {:error, :timestamp_required} = Tracking.write_state("new", nil, "effect-1")
 
@@ -115,5 +184,18 @@ defmodule Stokowski.PromptReportTrackingPhase1Test do
     [feedback] = Tracking.recent_comments(comments, "2026-01-01T00:00:00Z")
     assert feedback.author == "Ada"
     assert feedback.body == "ordinary feedback"
+  end
+
+  test "legacy gate markers preserve statuses outside the native v1 set" do
+    comments = [
+      %{
+        "id" => "legacy",
+        "body" =>
+          ~s(<!-- stokowski:gate {"state":"review","status":"waiting_for_operator","timestamp":"2026-01-01T00:00:00Z"} -->)
+      }
+    ]
+
+    assert {:ok, marker} = Tracking.latest(comments, "gate")
+    assert marker.payload["status"] == "waiting_for_operator"
   end
 end

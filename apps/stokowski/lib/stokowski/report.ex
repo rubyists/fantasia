@@ -189,8 +189,12 @@ defmodule Stokowski.Report do
         lines
 
       values ->
-        (lines ++ [">", "> **Next steps**"] ++ Enum.with_index(values, 1))
-        |> Enum.map(fn {value, index} -> "> #{index}. #{clean(value)}" end)
+        numbered =
+          values
+          |> Enum.with_index(1)
+          |> Enum.map(fn {value, index} -> "> #{index}. #{clean(value)}" end)
+
+        lines ++ [">", "> **Next steps**"] ++ numbered
     end
   end
 
@@ -318,9 +322,11 @@ defmodule Stokowski.Report do
         caption = field_any(artifact, :caption) |> format()
         url = Map.get(uploaded, file)
 
+        caption = if caption == "", do: file, else: caption
+
         if url && String.ends_with?(String.downcase(file), ".png"),
-          do: "![#{caption || file}](#{url})",
-          else: "[#{caption || file}](#{url || file})"
+          do: "![#{caption}](#{url})",
+          else: "[#{caption}](#{url || file})"
       end)
 
     if rendered == [],
@@ -394,6 +400,7 @@ defmodule Stokowski.Report do
   defp format(nil), do: ""
   defp format(value) when is_binary(value), do: value
   defp format(value) when is_list(value), do: Enum.map_join(value, ", ", &format/1)
+  defp format(value) when is_map(value), do: inspect(value)
   defp format(value), do: to_string(value)
 
   defp titleize(value),

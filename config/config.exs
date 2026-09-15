@@ -9,7 +9,7 @@
 # move said applications out of the umbrella.
 import Config
 
-config :continuum, trusted_modules: [:erlang, :crypto]
+config :continuum, trusted_modules: [:crypto, Stokowski.Deterministic]
 
 # Sample configuration:
 #

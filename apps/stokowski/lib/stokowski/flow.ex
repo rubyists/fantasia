@@ -45,7 +45,7 @@ defmodule Stokowski.Flow do
        when status in [:completed, :cancelled, :failed, :escalated],
        do: result(snapshot, state)
 
-  defp consume(snapshot, state, [], true, issue) when state.status == :waiting do
+  defp consume(snapshot, state, [], true, issue) do
     event = await(signal(:phase_event))
     consume(snapshot, state, [event], true, issue)
   end

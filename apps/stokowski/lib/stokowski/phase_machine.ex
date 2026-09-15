@@ -45,12 +45,6 @@ defmodule Stokowski.PhaseMachine do
     |> List.first()
   end
 
-  defp reduce_event(_snapshot, %Domain.Phase{type: :terminal}, state, %Domain.TerminalCompleted{
-         reason: reason
-       }) do
-    {:ok, %{state | status: :completed, feedback: reason}, []}
-  end
-
   defp reduce_event(_snapshot, _phase, state, %Domain.TerminalCompleted{reason: reason}) do
     {:ok, %{state | status: :cancelled, feedback: reason}, [{:cancel, %{reason: reason}}]}
   end
@@ -119,45 +113,56 @@ defmodule Stokowski.PhaseMachine do
     end
   end
 
-  defp rework(_snapshot, phase, state, feedback)
-       when is_integer(phase.max_rework) and phase.max_rework > 0 and
-              state.run >= phase.max_rework do
-    failure = %Domain.Failure{
-      class: :configuration,
-      reason: :max_rework_exceeded,
-      retryable: false,
-      detail: %{phase: phase.name, run: state.run, feedback: feedback}
-    }
-
-    {:ok, %{state | status: :escalated, failure: failure, feedback: feedback},
-     [{:escalate, %{failure: failure}}]}
-  end
-
   defp rework(snapshot, phase, state, feedback) do
-    case phase.rework_to do
-      :unavailable ->
-        {:error, {:missing_rework_target, phase.name}}
+    rework_counts = Map.get(state, :rework_counts, %{})
+    rework_count = Map.get(rework_counts, phase.name, 0)
 
-      target ->
-        with {:ok, _target_phase} <- phase(snapshot, target) do
-          next = %{
-            state
-            | phase: target,
-              run: state.run + 1,
-              attempt: 1,
-              status: target_status(snapshot, target),
-              feedback: feedback,
-              transitions: state.transitions ++ [%{from: phase.name, event: :rework, to: target}]
-          }
+    if rework_limit_reached?(phase.max_rework, rework_count) do
+      failure = %Domain.Failure{
+        class: :configuration,
+        reason: :max_rework_exceeded,
+        retryable: false,
+        detail: %{
+          phase: phase.name,
+          rework_count: rework_count,
+          max_rework: phase.max_rework,
+          feedback: feedback
+        }
+      }
 
-          {:ok, next,
-           [
-             {:rework, %{from: phase.name, to: target, feedback: feedback}},
-             {:dispatch, %{phase: target, run: next.run, attempt: next.attempt}}
-           ]}
-        end
+      {:ok, %{state | status: :escalated, failure: failure, feedback: feedback},
+       [{:escalate, %{failure: failure}}]}
+    else
+      case phase.rework_to do
+        :unavailable ->
+          {:error, {:missing_rework_target, phase.name}}
+
+        target ->
+          with {:ok, _target_phase} <- phase(snapshot, target) do
+            next = %{
+              state
+              | phase: target,
+                run: state.run + 1,
+                attempt: 1,
+                status: target_status(snapshot, target),
+                feedback: feedback,
+                rework_counts: Map.put(rework_counts, phase.name, rework_count + 1),
+                transitions:
+                  state.transitions ++ [%{from: phase.name, event: :rework, to: target}]
+            }
+
+            {:ok, next,
+             [
+               {:rework, %{from: phase.name, to: target, feedback: feedback}},
+               {:dispatch, %{phase: target, run: next.run, attempt: next.attempt}}
+             ]}
+          end
+      end
     end
   end
+
+  defp rework_limit_reached?(:unavailable, _count), do: false
+  defp rework_limit_reached?(limit, count), do: is_integer(limit) and count >= limit
 
   defp effects(snapshot, state, specs) do
     Enum.with_index(specs, fn {kind, data}, index ->
@@ -176,9 +181,7 @@ defmodule Stokowski.PhaseMachine do
 
       id =
         {attempt, index, kind, data}
-        |> :erlang.term_to_binary([:deterministic])
-        |> then(&:crypto.hash(:sha256, &1))
-        |> Base.encode16(case: :lower)
+        |> Stokowski.Deterministic.hash()
 
       %Domain.RequiredEffect{
         id: "effect:#{id}",

@@ -92,7 +92,7 @@ defmodule Stokowski.Domain do
             session: :inherit | :handoff | :fresh,
             transitions: %{optional(binary()) => binary()},
             rework_to: Stokowski.Domain.unavailable() | binary(),
-            max_rework: Stokowski.Domain.unavailable() | pos_integer()
+            max_rework: Stokowski.Domain.unavailable() | non_neg_integer()
           }
   end
 
@@ -162,7 +162,8 @@ defmodule Stokowski.Domain do
               status: :running,
               transitions: [],
               feedback: :unavailable,
-              failure: :unavailable
+              failure: :unavailable,
+              rework_counts: %{}
 
     @type t :: %__MODULE__{
             phase: binary(),
@@ -171,7 +172,8 @@ defmodule Stokowski.Domain do
             status: :running | :waiting | :completed | :failed | :cancelled | :escalated,
             transitions: [map()],
             feedback: Stokowski.Domain.unavailable() | binary(),
-            failure: Stokowski.Domain.unavailable() | term()
+            failure: Stokowski.Domain.unavailable() | term(),
+            rework_counts: %{optional(binary()) => non_neg_integer()}
           }
   end
 
@@ -311,6 +313,7 @@ defmodule Stokowski.Domain do
   def normalize_event(:complete), do: {:ok, agent_completed()}
   def normalize_event(:approve), do: {:ok, approve()}
   def normalize_event(:rework), do: {:ok, rework()}
+  def normalize_event(:escalate), do: {:ok, escalate()}
   def normalize_event(:terminal), do: {:ok, terminal()}
 
   def normalize_event(%{"type" => type} = event) do
@@ -325,8 +328,11 @@ defmodule Stokowski.Domain do
     end
   end
 
-  def normalize_event(%{type: type} = event),
-    do: normalize_event(Map.put(event, "type", type))
+  def normalize_event(%{type: _type} = event),
+    do:
+      event
+      |> Map.new(fn {key, value} -> {to_string(key), value} end)
+      |> normalize_event()
 
   def normalize_event(other), do: {:error, {:invalid_event, other}}
 
