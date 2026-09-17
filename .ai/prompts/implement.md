@@ -77,11 +77,9 @@ If this is a rework run (a branch and PR already exist):
 
 Before finishing, verify:
 
-- [ ] All tests pass
-- [ ] No type errors
-- [ ] No lint errors (rubocop)
-- [ ] All acceptance criteria from the ticket description met
-- [ ] PR created (or updated) and linked to Linear issue
-- [ ] PR Review comments addressed (actioned or skipped, with justification)
-- [ ] Evidence captured to `$STOKOWSKI_ARTIFACTS` for any visible change
-- [ ] `.stokowski/report.json` written, every claim sourced
+- [ ] `mix ci` is clean
+- [ ] All acceptance criteria from the ticket description are met
+- [ ] PR has been created (or updated) and linked to Linear issue
+- [ ] PR Review comments are addressed (actioned or skipped, with justification)
+- [ ] Evidence has been captured to `$STOKOWSKI_ARTIFACTS` for any visible change
+- [ ] `.stokowski/report.json` has been written, every claim is sourced
