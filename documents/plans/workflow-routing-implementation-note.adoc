@@ -1,0 +1,93 @@
+= Workflow routing implementation note
+:date: 2026-09-17
+:status: implemented baseline
+
+== Purpose
+
+This note records Fantasia's adopted workflow-routing baseline after Phase 1.
+It supplements, rather than rewrites, the historical inline default workflow
+in link:initial-plan.adoc[the initial plan]. The routed model was an intended
+Fantasia direction and is now available in the vendored Stokowski bootstrap.
+
+== Implemented baseline
+
+`workflow.yaml` is the live entrypoint and points to `workflow.glean.yaml`.
+That root configuration contains only shared runtime concerns:
+
+* tracker and Linear lifecycle-state mappings;
+* polling, workspace, hooks, runner defaults, concurrency, and server settings;
+* the shared `global.md` prompt; and
+* deterministic label routing.
+
+Pipeline definitions live under `.ai/workflows/`, exposed to Stokowski through
+the repository `workflows/` symlink. The configured routes are:
+
+[cols="1,1,2",options="header"]
+|===
+|Route
+|Workflow
+|Purpose
+
+|default
+|`feature`
+|New product work.
+
+|`bug`
+|`bug-fix`
+|Reproduce and diagnose a defect before implementing it.
+
+|`spike`
+|`spike`
+|Time-boxed technical investigation.
+
+|`exploration`
+|`exploration`
+|Open-question investigation without implementation.
+|===
+
+The first matching route wins and the selected workflow is pinned for the run;
+changing labels mid-run does not change its state machine. Every named workflow
+uses the shared root global prompt. State prompt paths remain explicit because
+the Stokowski configuration schema has no shared stage-prompt registry.
+
+Feature and bug-fix workflows add a delivery path after review:
+
+`delivery-review -> glean -> glean-review -> improvement -> merge -> done`.
+
+Glean proposes evidence-backed deferred work. A human supplies an explicit
+candidate manifest at the Glean gate. Improvement fails closed when that
+manifest is absent and mechanically creates only the approved follow-up issues.
+The feature and bug-fix merge stage then performs the approved, passing-CI PR
+merge. Spike and exploration workflows finish after Improvement because they do
+not create a PR.
+
+== Phase 2 implications
+
+Phase 2 external-adapter work builds on this baseline; it does not need to
+invent a parallel routing model. Each tracker adapter must provide the labels,
+stable issue identity, and lifecycle state needed to select and pin a route.
+The adapter dispatcher must pass the selected workflow graph and its prompt
+paths into the normalized snapshot used by the Phase 1 reducer.
+
+Phase 2 acceptance coverage must add:
+
+* default routing and each configured label route;
+* deterministic first-match precedence for multi-labelled issues;
+* route pinning across a label change, retry, and restart; and
+* adapter parity for every label/state value consumed by the selected graph.
+
+The existing Phase 2 workspace, hook, runner, process-lifecycle, and secret
+redaction requirements remain unchanged. Phase 3 owns hot reload and recovery;
+it must preserve the pinned workflow for an in-flight run while applying a
+new routing configuration only to later dispatches.
+
+== Verification
+
+The checked-in configuration is validated with:
+
+----
+mise exec -- mix stokowski --dry-run
+----
+
+The command validates the root configuration and every named workflow before
+listing candidate issues.

@@ -713,4 +713,3 @@ run and document the lifecycle change.
 |Choose the first Ollama model and tool-loop acceptance suite in a post-parity
 plan, not this bootstrap.
 |===
-

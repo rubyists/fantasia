@@ -18,14 +18,6 @@ No description provided.
 
 Implement the solution, create a PR, and ensure it passes all quality checks.
 
-## Rule
-
-Always sign git commits. If a gpg-agent is not available with a signing key,
-stop and note that on the linear issue, do not create an unsigned commit.
-
-Follow conventional commit message title rules for PR titles. This is
-necessary for release-please to pick up our squash merge commits to main.
-
 ## First run
 
 1. Read the investigation summary from the Linear comments.
@@ -35,18 +27,30 @@ necessary for release-please to pick up our squash merge commits to main.
    git checkout -b {{ issue.identifier | lower }}-<short-description>
    ```
 4. Implement the changes with clean, logical commits.
-5. Run the repository quality checks:
-   - `mise exec -- mix format --check-formatted`
-   - `mise exec -- mix test`
+5. Run the full quality suite:
+   - Type checking
+   - Linting
+   - All tests
 6. Fix any failures before proceeding.
-7. Push the branch and create a PR:
+7. Review your own diff, and wait for the github review action to complete.
+   Once the review is posted, investigate any issues and address them
+   before continuing. Comment on the PR with which were actioned, which
+   were not, and why.
+8. Push the branch and create a PR:
    ```
    git push -u origin HEAD
-   gh pr create --title "<type>(scope): <concise title>" --body "<description>"
+   gh pr create --title "{{ issue.identifier }}: <concise title>" --body "<description>"
    ```
-   We follow the same conventional commit message title for PR titles
-8. Link the PR to the Linear issue.
-9. Post a Linear comment with: what was done, what was tested, any known limitations.
+9. Link the PR to the Linear issue.
+10. Write `.stokowski/report.json`: what changed and why, the exact
+    verification commands and their real results, assumptions, and known
+    limitations. Set `verdict` to `complete` or `blocked`, put the reviewer's
+    summary in `next`, and anything they must check in `next_steps`. Add 3-5
+    bullets to `key_points`: what changed, what you actually verified, and
+    anything the reviewer should be suspicious of. Those four fields render at
+    the top of the Linear comment and are what the gate reads first — someone
+    who reads only them should know whether this is safe to merge. Stokowski
+    posts it.
 
 ## Rework run
 
@@ -67,15 +71,15 @@ If this is a rework run (a branch and PR already exist):
    - Which review comments were addressed
    - What was modified
    - Any decisions or trade-offs
-7. Post a Linear comment summarising the rework.
+7. Write a fresh `.stokowski/report.json` covering the rework.
 
 ## Quality bar
 
 Before finishing, verify:
 
-- [ ] All tests pass
-- [ ] No type errors
-- [ ] No lint errors
-- [ ] All acceptance criteria from the ticket description met
-- [ ] PR created (or updated) and linked to Linear issue
-- [ ] Linear comment posted with a completion summary
+- [ ] `mix ci` is clean
+- [ ] All acceptance criteria from the ticket description are met
+- [ ] PR has been created (or updated) and linked to Linear issue
+- [ ] PR Review comments are addressed (actioned or skipped, with justification)
+- [ ] Evidence has been captured to `$STOKOWSKI_ARTIFACTS` for any visible change
+- [ ] `.stokowski/report.json` has been written, every claim is sourced

@@ -1,0 +1,66 @@
+# Shared Stokowski runtime configuration. Pipelines live in workflows/*.yaml.
+
+tracker:
+  kind: linear
+  project_slug: "25967a4634d3"
+  assignee: me
+
+linear_states:
+  todo: "Todo"
+  active: "In Progress"
+  review: "Human Review"
+  gate_approved: "Gate Approved"
+  rework: "Rework"
+  terminal: [Done, Closed, Cancelled, Canceled, Duplicate]
+
+polling:
+  interval_ms: 15000
+
+workspace:
+  root: ~/.local/share/stokowski/workspaces/fantasia
+
+hooks:
+  after_create: |
+    git clone --depth 1 --recursive git@github.com:rubyists/fantasia .
+    mise trust
+    mise install
+    mise exec -- mix setup
+  before_run: |
+    git fetch origin main
+    git rebase origin/main 2>/dev/null || git rebase --abort
+  timeout_ms: 240000
+
+claude:
+  permission_mode: auto
+  max_turns: 20
+  turn_timeout_ms: 3600000
+  stall_timeout_ms: 300000
+
+agent:
+  max_concurrent_agents: 4
+  max_retry_backoff_ms: 300000
+  max_concurrent_agents_by_state:
+    investigate: 2
+    ground-check: 2
+    implement: 2
+    code-review: 1
+    glean: 1
+    improvement: 1
+    merge: 1
+
+prompts:
+  global_prompt: .ai/prompts/global.md
+
+server:
+  host: 127.0.0.1
+  port: 4200
+
+routing:
+  default: feature
+  rules:
+    - label: bug
+      workflow: bug-fix
+    - label: spike
+      workflow: spike
+    - label: exploration
+      workflow: exploration

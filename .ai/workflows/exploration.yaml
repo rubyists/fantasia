@@ -1,0 +1,74 @@
+# =============================================================================
+# Exploration — answer an open question without implementing it
+# =============================================================================
+
+description: "Open questions. The deliverable is evidence, a decision, and approved next work."
+
+states:
+  investigate:
+    type: agent
+    prompt: .ai/prompts/explore.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-sol
+    effort: xhigh
+    max_turns: 12
+    session: inherit
+    transitions:
+      complete: ground-check
+
+  ground-check:
+    type: agent
+    prompt: .ai/prompts/ground_check.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-sol
+    effort: xhigh
+    max_turns: 8
+    session: fresh
+    transitions:
+      complete: findings-review
+
+  findings-review:
+    type: gate
+    linear_state: review
+    rework_to: investigate
+    max_rework: 3
+    transitions:
+      approve: glean
+
+  glean:
+    type: agent
+    prompt: .ai/prompts/glean.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-sol
+    effort: xhigh
+    max_turns: 12
+    session: fresh
+    transitions:
+      complete: glean-review
+
+  glean-review:
+    type: gate
+    linear_state: review
+    rework_to: glean
+    max_rework: 3
+    transitions:
+      approve: improvement
+
+  improvement:
+    type: agent
+    prompt: .ai/prompts/improvement.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-luna
+    effort: low
+    max_turns: 8
+    session: fresh
+    transitions:
+      complete: done
+
+  done:
+    type: terminal
+    linear_state: terminal

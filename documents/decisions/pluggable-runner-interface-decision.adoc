@@ -19,7 +19,7 @@ endif::[]
 {status}:: {status_comment}
 
 This decision supersedes fixed-runner assumptions in
-link:initial-plan.adoc[the initial Elixir port plan]. Claude Code and Codex are
+link:../plans/initial-plan.adoc[the initial Elixir port plan]. Claude Code and Codex are
 the initial built-in adapters, not a closed set of runners.
 
 == Context

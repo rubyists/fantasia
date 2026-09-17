@@ -1,0 +1,128 @@
+# =============================================================================
+# Feature — investigate, deliver, harvest follow-ups, then merge
+# =============================================================================
+
+description: "New product work. Follow-ups require human approval; merge is mechanical."
+
+states:
+  investigate:
+    type: agent
+    prompt: .ai/prompts/investigate.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-sol
+    effort: xhigh
+    max_turns: 8
+    session: inherit
+    transitions:
+      complete: ground-check
+
+  ground-check:
+    type: agent
+    prompt: .ai/prompts/ground_check.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-sol
+    effort: xhigh
+    max_turns: 8
+    session: fresh
+    transitions:
+      complete: research-review
+
+  research-review:
+    type: gate
+    linear_state: review
+    rework_to: investigate
+    max_rework: 3
+    transitions:
+      approve: implement
+
+  implement:
+    type: agent
+    prompt: .ai/prompts/implement.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-luna
+    effort: max
+    max_turns: 30
+    session: inherit
+    transitions:
+      complete: implementation-review
+
+  implementation-review:
+    type: gate
+    linear_state: review
+    rework_to: implement
+    max_rework: 5
+    transitions:
+      approve: code-review
+
+  code-review:
+    type: agent
+    prompt: .ai/prompts/review.md
+    linear_state: active
+    runner: claude
+    model: opus
+    effort: xhigh
+    max_turns: 10
+    session: fresh
+    transitions:
+      complete: delivery-review
+
+  delivery-review:
+    type: gate
+    linear_state: review
+    rework_to: implement
+    max_rework: 5
+    transitions:
+      approve: glean
+
+  glean:
+    type: agent
+    prompt: .ai/prompts/glean.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-sol
+    effort: xhigh
+    max_turns: 12
+    session: fresh
+    transitions:
+      complete: glean-review
+
+  glean-review:
+    type: gate
+    linear_state: review
+    rework_to: glean
+    max_rework: 3
+    transitions:
+      approve: improvement
+
+  # Mechanical: acts only on explicitly approved Glean candidate IDs.
+  improvement:
+    type: agent
+    prompt: .ai/prompts/improvement.md
+    linear_state: active
+    runner: codex
+    model: gpt-5.6-luna
+    effort: low
+    max_turns: 8
+    session: fresh
+    transitions:
+      complete: merge
+
+  # Mechanical: independently re-check approvals and CI, then merges.
+  merge:
+    type: agent
+    prompt: .ai/prompts/merge.md
+    linear_state: active
+    runner: claude
+    model: sonnet
+    effort: low
+    max_turns: 3
+    session: fresh
+    transitions:
+      complete: done
+
+  done:
+    type: terminal
+    linear_state: terminal

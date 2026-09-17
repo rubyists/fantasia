@@ -5,7 +5,7 @@
 == Context
 
 Stokowski `b80db05` superseded the workspace-write proposal in
-`documents/pre-phase-1-plan.adoc`. It invoked `codex exec` with JSONL, closed stdin,
+`documents/plans/pre-phase-1-plan.adoc`. It invoked `codex exec` with JSONL, closed stdin,
 `danger-full-access`, `approval_policy="never"`, and ephemeral sessions so autonomous Git metadata
 updates worked. Stokowski `26c3cff` replaced that historical argv spelling
 with `--dangerously-bypass-approvals-and-sandbox`, removes `--ephemeral`, unifies the workflow key
