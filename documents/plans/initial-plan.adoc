@@ -14,7 +14,7 @@ plan, not a claim that the listed work is already implemented.
 
 [IMPORTANT]
 ====
-Superseding decision: link:pluggable-runner-interface-decision.adoc[Pluggable
+Superseding decision: link:../decisions/pluggable-runner-interface-decision.adoc[Pluggable
 runner interface].
 
 Every reference in this plan to Claude Code and Codex as the supported runners
@@ -30,7 +30,7 @@ controls.
 [IMPORTANT]
 ====
 Superseding decision:
-link:pluggable-cli-tracker-interface-decision.adoc[Pluggable CLI tracker
+link:../decisions/pluggable-cli-tracker-interface-decision.adoc[Pluggable CLI tracker
 interface].
 
 Every Linear-specific tracker reference in this plan describes the legacy
@@ -124,14 +124,14 @@ without restarting its workflow from the beginning.
 * Support +agent+, +gate+, and +terminal+ phases, including cycles and bounded
   rework.
 * Provide the pluggable runner registry and normalized contract required by
-  link:pluggable-runner-interface-decision.adoc[the superseding runner
+  link:../decisions/pluggable-runner-interface-decision.adoc[the superseding runner
   decision], with +claude+ and +codex+ as the initial built-in adapters.
 * Retain three-layer prompt assembly: global prompt, phase prompt, and
   generated lifecycle context.
 * Retain tracker polling, priority ordering, blocker checks, structured
   tracking comments, and restart reconstruction through the pluggable CLI
   tracker contract required by
-  link:pluggable-cli-tracker-interface-decision.adoc[the superseding tracker
+  link:../decisions/pluggable-cli-tracker-interface-decision.adoc[the superseding tracker
   decision].
 * Retain isolated per-issue workspaces and all five lifecycle hooks.
 * Retain retry backoff, turn timeout, stall timeout, cancellation, session

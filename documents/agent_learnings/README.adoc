@@ -1,0 +1,36 @@
+= Agent learning entries
+
+This directory holds one source document for each approved, actionable learning
+that came out of an agent run. An Improvement-stage follow-up creates the issue;
+the PR that resolves that follow-up creates its entry.
+
+== Naming and ownership
+
+Name an entry `EXT-53_learned.adoc`, replacing `EXT-53` with the owning Linear
+issue identifier. The same PR must regenerate `../agent_learnings.adoc` from
+all current entries. Do not add entries directly from Glean or Improvement:
+those stages propose and create the owning issue, respectively.
+
+== Entry contents
+
+An entry is a concise technical-debt record, not a transcript. Include:
+
+* the repeatable failure or missing safeguard;
+* its evidence and the workflow/run in which it surfaced;
+* the guardrail introduced or the remaining concrete remediation;
+* the owner issue and status; and
+* a retirement condition.
+
+If there is no recurring failure, no concrete guardrail, or no owner, do not
+create an entry.
+
+== Bounded aggregate
+
+`../agent_learnings.adoc` is generated and contains only active operational
+learnings. It is deliberately bounded: retain at most 20 entries, ordered by
+risk and recency. A resolved entry is removed from the aggregate and retained
+only in its issue/PR history; an entry displaced by the limit must be retired,
+merged with a newer entry, or assigned a follow-up before regeneration passes.
+
+Most entries represent technical debt. Prefer fixing the underlying guardrail
+and retiring the entry over accumulating process instructions.

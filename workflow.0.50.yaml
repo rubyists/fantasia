@@ -1,0 +1,174 @@
+# =============================================================================
+# Stokowski — Fantasia workflow config
+# =============================================================================
+#
+# This is Fantasia's own checked-in workflow config, not a template to
+# copy elsewhere. Stokowski re-reads this file on every poll tick — changes
+# take effect without restart.
+#
+# Prompt files live in the .ai/prompts/ directory.  Each agent state
+# references its prompt via the `prompt` field.  A global prompt (shared
+# preamble) is injected before the stage-specific prompt when set.
+#
+# Linear states mapping:
+#   active        → the "working" state for agent stages
+#   review        → human review / PR review state
+#   gate_approved → human approved a gate (triggers transition)
+#   rework        → human requested changes (triggers rework_to)
+#   terminal      → list of done/closed states
+#
+# State types:
+#   agent    — Stokowski dispatches the state's configured runner
+#   gate     — pauses for human review; approve → next, rework → rework_to
+#   terminal — issue is finished; workspace cleaned up
+#
+# -----------------------------------------------------------------------------
+# Multi-project mode (optional — single-project YAML below still works as-is)
+# -----------------------------------------------------------------------------
+#
+# To monitor multiple Linear projects from one Stokowski process, replace the
+# top-level `tracker / workspace / hooks / prompts / states` blocks with a
+# `projects:` list. Each entry has its own tracker/workspace/hooks/prompts/
+# state machine. Top-level `polling`, `agent`, runner defaults, `linear_states`, and
+# `server` stay global and act as defaults each project can override.
+#
+#   agent:
+#     max_concurrent_agents: 8                  # global pool across all projects
+#     max_concurrent_per_project:               # optional fairness caps
+#       synced-sport: 6
+#       client-site:  2
+#
+#   projects:
+#     - name: synced-sport                      # required, used in dashboard + `p` menu
+#       tracker:
+#         kind: linear
+#         project_slug: "abc123def456"
+#         api_key: "$LINEAR_API_KEY"
+#       workspace:
+#         root: ~/.local/share/stokowski/workspaces/synced-sport
+#       hooks: { after_create: "git clone git@github.com:org/synced-sport.git ." }
+#       prompts: { global_prompt: prompts/synced-sport/global.md }
+#       states: { ... }                         # state machine, same as single-project
+#
+#     - name: client-site
+#       paused: true                            # start paused; toggle with `p` key
+#       tracker:
+#         kind: linear
+#         project_slug: "def456abc789"
+#         api_key: "$LINEAR_API_KEY"
+#       workspace:
+#         root: ~/.local/share/stokowski/workspaces/client-site
+#       hooks: { after_create: "git clone git@github.com:org/client-site.git ." }
+#       prompts: { global_prompt: prompts/client-site/global.md }
+#       claude: { max_turns: 20 }               # legacy shared runner defaults
+#       max_concurrent: 2                       # per-project cap (also via agent map above)
+#       states: { ... }
+#
+# In the terminal, `p` opens a numbered pause menu; in the web dashboard, each
+# project tile gets a Pause/Resume button and a per-project filter dropdown.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Tracker
+# ---------------------------------------------------------------------------
+tracker:
+  kind: linear
+  project_slug: "25967a4634d3"    # hex slugId from your Linear project URL
+  assignee: me                     # only issues assigned to the API key's user
+  # api_key: "$LINEAR_API_KEY"  # your Linear API key — agents inherit this
+
+# ---------------------------------------------------------------------------
+# Linear state name mapping
+# ---------------------------------------------------------------------------
+# These map Stokowski's internal lifecycle roles to your Linear state names.
+# You can rename values to match your Linear setup (e.g. todo: "Ready"),
+# but all six roles are required — removing or reordering them will break
+# the dispatch and gate protocol.
+linear_states:
+  todo: "Todo"                        # issues picked up from this state
+  active: "In Progress"               # moved here automatically when agent starts
+  review: "Human Review"              # agent pauses here at a gate for human review
+  gate_approved: "Gate Approved"      # human approved — agent advances to next state
+  rework: "Rework"                    # human requested changes — agent re-enters rework target
+  terminal:                           # issues in these states stop any running agent
+    - Done
+    - Closed
+    - Cancelled
+    - Canceled
+    - Duplicate
+
+# ---------------------------------------------------------------------------
+# Polling
+# ---------------------------------------------------------------------------
+polling:
+  interval_ms: 15000              # 15 seconds between ticks
+
+# ---------------------------------------------------------------------------
+# Workspace
+# ---------------------------------------------------------------------------
+workspace:
+  root: ~/.local/share/stokowski/workspaces/fantasia
+
+# ---------------------------------------------------------------------------
+# Hooks — shell scripts run in the workspace directory
+# ---------------------------------------------------------------------------
+hooks:
+  after_create: |
+    git clone --depth 1 --recursive git@github.com:rubyists/fantasia .
+    mise trust
+    mise install
+    mise exec -- mix setup
+  before_run: |
+    git fetch origin main
+    git rebase origin/main 2>/dev/null || git rebase --abort
+  timeout_ms: 240000
+
+# ---------------------------------------------------------------------------
+# Shared agent defaults. The vendored bootstrap currently exposes these under
+# its legacy `claude` key; omitting `model` prevents a Claude model ID from
+# leaking into Codex-selected states.
+# ---------------------------------------------------------------------------
+claude:
+  permission_mode: auto
+  max_turns: 20
+  turn_timeout_ms: 3600000        # 1 hour per turn
+  stall_timeout_ms: 300000        # 5 minutes with no output → kill
+
+# ---------------------------------------------------------------------------
+# Agent concurrency
+# ---------------------------------------------------------------------------
+agent:
+  max_concurrent_agents: 4
+  max_retry_backoff_ms: 300000    # 5-minute cap on exponential backoff
+  max_concurrent_agents_by_state:
+    investigate: 2                # allow 2 concurrent investigations
+    implement: 2
+    code-review: 1                # serial reviews prevent merge conflicts
+
+# ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+prompts:
+  global_prompt: .ai/prompts/global.md
+
+# ---------------------------------------------------------------------------
+# Server (optional web dashboard)
+# ---------------------------------------------------------------------------
+server:
+  host: 127.0.0.1
+  port: 4200
+
+# ---------------------------------------------------------------------------
+# Workflow routing
+# ---------------------------------------------------------------------------
+# Pipelines live in workflows/*.yaml; this file holds shared runtime settings.
+# The first matching rule wins and a workflow is pinned when an issue starts.
+routing:
+  default: feature
+  rules:
+    - label: bug
+      workflow: bug-fix
+    - label: spike
+      workflow: spike
+    - label: exploration
+      workflow: exploration

@@ -95,7 +95,7 @@
   input: unattended lc JSON used for normalized priority and stable ordering
   output: priority and created or updated timestamps tracked by EXT-64
   disposition: defer
-  adr: documents/pluggable-cli-tracker-interface-decision.adoc
+  adr: documents/decisions/pluggable-cli-tracker-interface-decision.adoc
 - id: continuum-input
   source: vendor/Continuum@237dfbb
   fixture: apps/stokowski/test/fixtures/config/normalized-flow.yaml

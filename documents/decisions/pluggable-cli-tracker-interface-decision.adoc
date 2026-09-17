@@ -19,7 +19,7 @@ endif::[]
 {status}:: {status_comment}
 
 This decision supersedes the fixed-Linear and direct-GraphQL assumptions in
-link:initial-plan.adoc[the initial Elixir port plan]. +lc+ and +gh+ are the
+link:../plans/initial-plan.adoc[the initial Elixir port plan]. +lc+ and +gh+ are the
 initial built-in tracker adapters, not special cases in the workflow engine.
 
 It is the tracker-side companion to
