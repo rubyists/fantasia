@@ -1,0 +1,28 @@
+schema_version: 1
+config_version: 1
+project_name: fantasia-exploration-example
+prompts:
+  global_prompt:
+    - prompts/global.md
+    - prompts/specialized.md
+states:
+  investigate:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: ground-check}
+  ground-check:
+    type: agent
+    prompt: prompts/phase.md
+    session: fresh
+    transitions: {complete: synthesize}
+  synthesize:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: review}
+  review:
+    type: gate
+    rework_to: investigate
+    max_rework: 2
+    transitions: {approve: done}
+  done:
+    type: terminal

@@ -1,0 +1,32 @@
+schema_version: 1
+config_version: 1
+project_name: fantasia-bug-fix-example
+prompts:
+  global_prompt:
+    - prompts/global.md
+    - prompts/specialized.md
+states:
+  reproduce:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: diagnose}
+  diagnose:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: ground-check}
+  ground-check:
+    type: agent
+    prompt: prompts/phase.md
+    session: fresh
+    transitions: {complete: review}
+  review:
+    type: gate
+    rework_to: diagnose
+    max_rework: 3
+    transitions: {approve: implement}
+  implement:
+    type: agent
+    prompt: prompts/phase.md
+    transitions: {complete: done}
+  done:
+    type: terminal
