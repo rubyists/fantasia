@@ -60,6 +60,19 @@ opt-in mode after the no-database workflow reaches parity.
 
 ## Installation
 
+Initialize the submodules and install the toolchain pinned in the root link:mise.toml[mise.toml],
+then prepare the umbrella from the repository root:
+
+[source,shell]
+----
+git submodule update --init --recursive
+mise install
+mise exec -- mix setup
+----
+
+link:documents/decisions/0008-managed-toolchain-refresh.adoc[ADR 0008] records the current
+toolchain refresh and its relationship to the historical compatibility evidence.
+
 ## Usage
 
 Validate the Phase 0 contracts and build the unpublished checkout-independent artifact:
@@ -78,6 +91,13 @@ compatible Erlang runtime; native standalone packaging is intentionally deferred
 Compatibility behavior and its provenance are indexed by
 `apps/stokowski/test/fixtures/compatibility_ledger.yaml`; normative decisions live under
 `documents/decisions/`.
+
+The ledger and runner fixtures retain the versions that produced their historical evidence.
+The root `mise.toml` selects the current installed tools, and the launcher verifies each
+configured runner against those pins. For runner updates, refresh provenance and capability
+evidence together with the pin or record an explicit superseding compatibility decision;
+link:documents/decisions/0008-managed-toolchain-refresh.adoc[ADR 0008] covers Codex `0.155.1`
+and Claude Code `2.1.276` without relabeling the Phase 0 fixtures.
 
 ## Copying
 

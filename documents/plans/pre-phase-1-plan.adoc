@@ -287,6 +287,14 @@ The implementation issues should start from these observed facts:
 
 === Root mise and Mix setup
 
+[NOTE]
+====
+The versions below are the original bootstrap proposal. The current installation manifest is
+the root +mise.toml+; link:../decisions/0008-managed-toolchain-refresh.adoc[ADR 0008] records
+the superseding toolchain refresh and explains why historical runner fixtures retain their
+original versions.
+====
+
 Add +mise.toml+ based on +vendor/linear-cli/mise.toml+:
 
 [source,toml]
