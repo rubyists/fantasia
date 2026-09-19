@@ -1,7 +1,7 @@
 [tools]
-erlang = "29.0.3"
-elixir = "1.20.3"
-python = "3.14.1"
-uv = "0.12.0"
-codex = "0.154.0"
-claude = "2.1.270"
+erlang = "29.1"
+elixir = "1.20.4"
+python = "3.14.7"
+uv = "0.12.16"
+codex = "0.155.1"
+claude = "2.1.276"
