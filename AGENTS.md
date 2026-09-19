@@ -39,6 +39,8 @@ Fantasia issues belong to the `EXT` team and the `Fantasia` project.
 - `documents/plans/initial-plan.adoc` describes the initial Elixir port and Fantasia release.
 - `documents/decisions/repository-management-mix-tasks-decision.adoc` records where repository-wide Mix tasks
   live and defines their discovery contract.
+- `documents/decisions/0008-managed-toolchain-refresh.adoc` records the accepted mise dependency refresh
+  and its version-scoped exception to ADR 0001's runner evidence update requirement.
 
 When a later decision changes a plan, add a new decision document or an implementation note rather
 than rewriting completed history without explanation.
