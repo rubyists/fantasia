@@ -74,12 +74,11 @@ relevant lockfiles and toolchain configuration. Do not import Linear CLI's
 Burrito change detection or packaging jobs: Fantasia has not selected that
 artifact format.
 
-The first slice does not impose Linear CLI's conventional-commit subject or PR
-title checks. Those are an independent repository policy, not a prerequisite
-for a reliable +mix ci+. Add them only in a separately reviewed policy change,
-at which point release-please's commit parsing can be aligned with that policy.
+The first slice must also impose Linear CLI's conventional-commit subject and PR
+title checks. Those are a prerequisite for all commits and PRs in our repositoried.
+Release-please's commit parsing must be aligned with that policy.
 
-=== Release-please manages a release PR, not a release
+=== Release-please manages a full 0.x.x release
 
 Add a main-branch workflow, modeled on +vendor/linear-cli/.github/workflows/main.yaml+:
 
@@ -89,10 +88,10 @@ Add a main-branch workflow, modeled on +vendor/linear-cli/.github/workflows/main
 . use +skip-github-release: true+.
 
 The action will maintain the version bump, manifest, and +CHANGELOG.md+ in a
-normal reviewable PR. Merging that PR must not create a tag, GitHub Release,
-binary artifact, checksum, or Homebrew update. This preserves ADR 0005 and the
-initial plan's Phase 6 boundary while giving maintainers a disciplined version
-stream now.
+normal reviewable PR. Merging that PR will create a GitHub Release, but not
+the binary artifact, SBOM, checksum, or Homebrew update. This implements
+part of ADR 0005, the initial plan's Phase 6 boundary is still responsible
+for those artifacts.
 
 The workflow needs only the minimum write permissions necessary to create and
 update that PR. Use a dedicated +RELEASE_PLEASE_TOKEN+ secret rather than
@@ -154,9 +153,8 @@ non-mutating test or action dry run.
 
 Acceptance:
 
-* version sources remain synchronized after a generated release PR;
-* release-please changes only intended root release metadata; and
-* its configuration explicitly disables GitHub-release creation.
+* version sources remain synchronized after a generated release PR
+* release-please changes only intended root release metadata
 
 === DEVEX-4: Add the main-branch release-PR manager
 
@@ -168,14 +166,13 @@ Acceptance:
 
 * ordinary main pushes open or update at most one pending release PR;
 * failed validation cannot invoke release-please;
-* merging a release PR does not publish anything; and
 * the release manager remains recoverable after a failed or manually repaired
   release PR.
 
 === DEVEX-5: Prepare the Phase 6 extension point
 
 Record, but do not implement, the handoff from a merged release PR to the
-Phase 6 native-artifact, GitHub-release, checksum, and Homebrew pipeline. The
+Phase 6 native-artifact, SBOM, container, checksum, and Homebrew pipeline. The
 future job must run only after actual artifact selection and the Phase 5 exit
 criteria are satisfied.
 
@@ -189,8 +186,7 @@ Before merging each slice:
   or GitHub Actions test run;
 * inspect the release-please PR diff for version, manifest, and changelog
   consistency; and
-* confirm no GitHub Release, tag, release asset, or Homebrew pull request was
-  created.
+* confirm the GitHub Release exists, with no binary artifacts
 
 Roll out in the listed order. DEVEX-1 and DEVEX-2 establish trustworthy
 validation before the release manager gets write authority. DEVEX-3 is safe to
@@ -200,6 +196,7 @@ protections are confirmed.
 == Non-goals
 
 This plan does not select or build a native distribution, publish Phase 0's
-unsigned escript, create GitHub Releases, generate checksums/SBOMs, update the
-Homebrew tap, or change commit-message policy. Those remain Phase 6 or a
-separate policy decision.
+unsigned escript, generate checksums/SBOMs, or update the
+Homebrew tap. Those remain Phase 6 or a
+separate policy decision. It _does_ add the commit message/PR title constraints,
+as we want that to be enforced as early as possible, not wait for phase 6.
