@@ -1,0 +1,32 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 21, 2026
+:my-title: Document links and diagrams
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+:document-location-decision: ./decision.adoc[the documentation location and format decision]
+:status: Accepted
+
+== Decision
+
+Use document attributes for repeated URLs and cross references. Keep the link
+target and its text in the attribute. Use the attribute in the document body.
+
+Use Mermaid in `[source,mermaid]` blocks for diagrams. Add prose or a table
+when a diagram contains information that readers need without the diagram.
+
+== Rationale
+
+See xref:{document-location-decision}.
+
+Attributes keep long URLs and document paths out of body prose. Mermaid source
+stays readable in Git and renders on GitHub.

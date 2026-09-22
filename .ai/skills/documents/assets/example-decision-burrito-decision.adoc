@@ -1,0 +1,72 @@
+= Burrito distribution decision
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 04, 2026
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+== Status
+
+Active. The project ships Burrito-wrapped binaries for macOS Apple Silicon,
+Linux x86_64/aarch64, and Windows x86_64.
+
+== Decision
+
+Continue using Burrito for end-user distribution.
+
+The primary product requirement is the easy-button installation experience:
+a user downloads/extracts a small platform-native release archive (or uses
+Homebrew/install.sh), puts its `lc` executable on `PATH`, and runs it. The
+executable carries the Erlang runtime, so users do not need to install Erlang,
+Elixir, or a project toolchain. The same Linux executable is also the payload
+for the daemon container.
+
+A standard `mix release` can include ERTS and therefore does not inherently
+require a user-installed Erlang runtime. It would, however, ship an unpacked
+release directory/tarball and need a separate user-facing launcher for this
+CLI. That is a worthwhile fallback, but materially less direct than the
+single-executable path.
+
+== Cost and safeguards
+
+Burrito adds release-engineering work: native NIF compatibility, embedded
+ERTS/musl behavior, cross-platform CI, and occasional upstream workarounds.
+This cost is accepted because the distribution experience is important.
+
+The release pipeline must continue to prove the supported artifacts work:
+
+* build each target on a compatible native runner;
+* assert every required release artifact exists;
+* smoke-test Linux binaries with the native Markdown/NIF runtime loaded;
+* retain the Linux loader isolation regression coverage; and
+* treat a Burrito upgrade or a newly added native dependency as a
+  release-platform change, requiring smoke testing on every supported target.
+
+== When to revisit
+
+Reconsider Burrito in favor of native per-platform `mix release --tar`
+artifacts when one or more of these becomes true:
+
+* maintaining Burrito patches or workarounds repeatedly blocks releases or
+  creates unacceptable security risk;
+* a supported target or new native dependency cannot be packaged and tested
+  reliably; or
+* the project no longer values the single-executable installation experience
+  enough to justify its maintenance cost.
+
+Any replacement must preserve the current practical guarantees: no required
+Erlang/Elixir install for users, a documented `lc` launcher and wrapper
+scripts, checksummed release assets, and a viable daemon-container build.
+
+== History
+
+The initial packaging decision and empirical `exqlite` cross-build validation
+are recorded in link:phase-8-plan.adoc[Phase 8]. Later Burrito-specific
+hardening belongs in the commits and tests that implement it; this document
+records the continuing product decision and its review criteria.
