@@ -35,14 +35,13 @@ Fantasia issues belong to the `EXT` team and the `Fantasia` project.
 
 ## Documents
 
-Use the link:vendor/claude-plain-english-skill/skills/simple-english[`simple-english`] skill when
+Use the [`simple-english`](vendor/claude-plain-english-skill/skills/simple-english) skill when
 authoring technical documentation or instructions.
 
-Use the link:vendor/claude-plain-english-skill/skills/plain-english[`plain-english`] skill when
+Use the [`plain-english`](vendor/claude-plain-english-skill/skills/plain-english) skill when
 authoring non-technical documentation, marketing copy, or other content intended for a general audience.
 
-Do not apply both to the same text. Use `plain-english` for general audience content and `simple-english`
-for technical content.
+Do not apply both to the same text.
 
 ### Planning documents
 
