@@ -1,0 +1,540 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Aug 18, 2026
+:my-title: Ash domain ERD: LinearCli.Linear
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+
+== Architecture overview
+
+`LinearCli.Linear` is the single Ash domain in this application.
+It has *no local data layer* — the Linear GraphQL API is the backing store.
+Each resource's actions are implemented as `Ash.Resource.ManualRead`,
+`Ash.Resource.ManualCreate`, or `Ash.Resource.ManualUpdate` modules that
+call `LinearCli.Api.call/2` directly with hand-built GraphQL documents.
+
+There is no `Ecto.Repo`, no database, and no Ash migration.
+Data returned from the API is decoded by each resource's `from_map/1`
+function and stored in struct fields typed as `:term` or
+`{:array, :term}` when they hold other resource structs.
+
+*No Ash DSL `relationships do` blocks exist anywhere in this domain.*
+All associations described in the ERD below are GraphQL/nested-data
+associations: they are populated from nested JSON in the API response,
+not from Ash relationship declarations or database join logic.
+
+== ERD diagram
+
+All eight resources and their GraphQL/nested-data associations.
+Every edge is labeled *[nested]* to make explicit that these are not
+declared Ash relationships.  Resource attributes that hold nested structs
+are shown with the target resource name as their type.
+
+[source,mermaid]
+----
+erDiagram
+    User {
+        string id PK
+        string name
+        string email
+        Team[] teams
+    }
+    Team {
+        string id PK
+        string key
+        string name
+        string description
+    }
+    Project {
+        string id PK
+        string name
+        string content
+        string slug_id
+        string description
+        string url
+        Team[] teams
+    }
+    Issue {
+        string id PK
+        string identifier
+        string title
+        string branch_name
+        string description
+        User assignee
+        WorkflowState state
+        Team team
+        Comment[] comments
+        Label[] labels
+        IssueRelation[] relations
+        IssueRelation[] inverse_relations
+    }
+    IssueRelation {
+        string id PK
+        atom direction
+        string type
+        term issue
+        term related_issue
+    }
+    Label {
+        string id PK
+        string name
+        string description
+        boolean is_group
+    }
+    WorkflowState {
+        string id PK
+        string name
+        float position
+        string type
+        string description
+    }
+    Comment {
+        string id PK
+        string body
+        string url
+        User user
+    }
+    ProjectUpdate {
+        string id PK
+        string body
+        string health
+        string url
+    }
+
+    Issue }o--o| User : "assignee [nested]"
+    Issue }o--|| WorkflowState : "state [nested]"
+    Issue }o--|| Team : "team [nested]"
+    Issue ||--o{ Comment : "comments [nested]"
+    Issue ||--o{ Label : "labels [nested]"
+    Issue ||--o{ IssueRelation : "relations [nested, outbound]"
+    Issue ||--o{ IssueRelation : "inverse_relations [nested, inbound]"
+    User }o--o{ Team : "teams [nested]"
+    Comment }o--|| User : "user/author [nested]"
+    Project }o--o{ Team : "teams [nested]"
+----
+
+NOTE: All edges are GraphQL/nested-data associations. No Ash DSL
+`relationships do` block exists in this domain.  `Label`,
+`WorkflowState`, and `ProjectUpdate` have no stored association
+attributes — their team or project context is passed as action
+arguments only.
+
+== Resources (text reference)
+
+The table below is the plain-text equivalent of the entity boxes in the
+diagram above, included for accessibility.
+
+Nine resources are registered in `LinearCli.Linear`
+(`app/lib/linear_cli/linear.ex`).
+
+[cols="1,2,3", options="header"]
+|===
+| Resource module | Primary key | Public attributes
+
+| `LinearCli.Linear.User`
+| `id` (`:string`)
+| `name`, `email`, `teams` (`{:array, :term}`)
+
+| `LinearCli.Linear.Team`
+| `id` (`:string`)
+| `key`, `name`, `description`
+
+| `LinearCli.Linear.Project`
+| `id` (`:string`)
+| `name`, `content`, `slug_id`, `description`, `url`, `teams` (`{:array, :term}`)
+
+| `LinearCli.Linear.Issue`
+| `id` (`:string`)
+| `identifier`, `title`, `branch_name`, `description`, `assignee` (`:term`), `state` (`:term`), `team` (`:term`), `comments` (`{:array, :term}`), `labels` (`{:array, :term}`), `relations` (`{:array, :term}`), `inverse_relations` (`{:array, :term}`)
+
+| `LinearCli.Linear.Label`
+| `id` (`:string`)
+| `name`, `description`, `is_group`
+
+| `LinearCli.Linear.WorkflowState`
+| `id` (`:string`)
+| `name`, `position`, `type`, `description`
+
+| `LinearCli.Linear.Comment`
+| `id` (`:string`)
+| `body`, `url`, `user` (`:term`)
+
+| `LinearCli.Linear.ProjectUpdate`
+| `id` (`:string`)
+| `body`, `health`, `url`
+
+| `LinearCli.Linear.IssueRelation`
+| `id` (`:string`)
+| `type` (`:string`), `direction` (`:atom`, `:outbound` or `:inbound`), `issue` (`:term`), `related_issue` (`:term`)
+|===
+
+== Associations (text reference)
+
+The table below is the plain-text equivalent of the diagram edges above,
+included for accessibility.
+
+All associations in this domain are populated from nested GraphQL response
+data, not from declared Ash relationships.
+*No Ash DSL relationship* is declared anywhere in the domain.
+
+[cols="1,1,1,2,2", options="header"]
+|===
+| Source | Target | Cardinality | Attribute on source | Implementation type
+
+| `Issue`
+| `User`
+| many-to-one (assignee)
+| `assignee` (`:term`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.assignee`
+
+| `Issue`
+| `WorkflowState`
+| many-to-one (current state)
+| `state` (`:term`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.state`
+
+| `Issue`
+| `Team`
+| many-to-one
+| `team` (`:term`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.team`
+
+| `Issue`
+| `Comment`
+| one-to-many
+| `comments` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.comments.nodes` (full fragment only)
+
+| `Issue`
+| `Label`
+| one-to-many
+| `labels` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.labels.nodes` (full fragment only)
+
+| `Issue`
+| `IssueRelation`
+| one-to-many (outbound)
+| `relations` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.relations.edges` (full fragment only); direction set to `:outbound`
+
+| `Issue`
+| `IssueRelation`
+| one-to-many (inbound)
+| `inverse_relations` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Issue.from_map/1` from `issue.inverseRelations.edges` (full fragment only); direction set to `:inbound`
+
+| `User`
+| `Team`
+| many-to-many
+| `teams` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `User.from_map/1` from `viewer.teams.nodes`
+
+| `Comment`
+| `User`
+| many-to-one (author)
+| `user` (`:term`)
+| GraphQL/nested-data — populated by `Comment.from_map/1` from `comment.user`
+
+| `Project`
+| `Team`
+| many-to-many
+| `teams` (`{:array, :term}`)
+| GraphQL/nested-data — populated by `Project.from_map/1` from `project.teams.nodes` (via `fields_with_teams/0`)
+
+| `Team`
+| `Project`
+| one-to-many (implicit)
+| _(none — not stored on `Team`)_
+| GraphQL/nested-data — fetched via `Team.full_fields/0` in `Team.Read.Find`; the result is not stored as a `Team` attribute
+
+|===
+
+=== Notes on unidirectional associations
+
+* `Label` is stored as an association attribute on `Issue` (`labels`, `{:array, :term}`) —
+  populated from `issue.labels.nodes` in `full_fields` responses and in compact list
+  responses when `include_labels: true` or `labels` is non-empty (via `list_fields_with_labels/0`).
+  However, `Label` itself has no stored back-reference to its team; the
+  `team_id` is passed as an action argument to `Label.Read.ByTeam` only.
+* `WorkflowState` has no stored association attributes.
+  Its `team_id` appears only as a query argument passed to its read
+  actions; there is no `:team` field on that struct.
+* `ProjectUpdate` has no stored association attributes.
+  Its `project_id` appears only as a required create argument.
+* When `Team.Read.Find` fetches a team by id, the response includes
+  `projects { nodes { ... } }` (via `Team.full_fields/0`), but those
+  projects are not stored on the `Team` struct — the list is available
+  to the caller inline and is not persisted anywhere.
+
+== Action and code-interface matrix
+
+The table below maps every domain code-interface (defined in
+`app/lib/linear_cli/linear.ex`) to its backing action, action type,
+manual-implementation module, and the Linear GraphQL operation it calls.
+
+[cols="1,1,1,2,2,2", options="header"]
+|===
+| Resource | Code interface | Action name | Action type | Manual module | GraphQL operation
+
+| `User`
+| `me`
+| `:me`
+| read (`get?: true`)
+| `Linear.User.Read.Me`
+| `{ viewer { ... } }` — `viewer` query with `User.fields_with_teams/0`
+
+| `Team`
+| `teams`
+| `:all`
+| read
+| `Linear.Team.Read.All`
+| `teams(first:, after:)` — paginated with `Team.base_fields/0`
+
+| `Team`
+| `my_teams`
+| `:mine`
+| read
+| `Linear.Team.Read.Mine`
+| delegates to `User.Read.Me`, returns `user.teams`
+
+| `Team`
+| `find_team`
+| `:find`
+| read (`get?: true`)
+| `Linear.Team.Read.Find`
+| `team(id: $id) { ... }` — with `Team.full_fields/0`
+
+| `Project`
+| `projects`
+| `:all`
+| read
+| `Linear.Project.Read.All`
+| `projects(first:, after:)` — paginated with `Project.base_fields/0`
+
+| `Project`
+| `my_projects`
+| `:mine`
+| read
+| `Linear.Project.Read.Mine`
+| `team(id:) { projects }` per user team, fanned out concurrently
+
+| `Project`
+| `projects_by_team`
+| `:by_team`
+| read
+| `Linear.Project.Read.ByTeam`
+| `team(id: $teamId) { projects(first:, after:, filter:) { ... } }` — paginates the selected team's projects, or applies a server-side name/slug/id filter when `search` is supplied
+
+| `Project`
+| `create_project`
+| `:create`
+| create
+| `Linear.Project.Create`
+| `projectCreate(input: { name, teamIds })` mutation
+
+| `Project`
+| `find_project_by_name`
+| `:by_name`
+| read (`get?: true`)
+| `Linear.Project.Read.ByName`
+| `projects(filter: {name: {eq: $name}}, first: 1)` with `Project.fields_with_teams/0`
+
+| `Issue`
+| `issues`
+| `:list`
+| read
+| `Linear.Issue.Read.List`
+| `issues(filter:, first:, after:)` paginated; `state` filters workflow-state types,
+  `status` filters friendly workflow-state names, `labels` filters by label name
+  (case-insensitive OR match via `IssueLabelCollectionFilter.some`); `include_labels`
+  (boolean, default `false`) selects label fields in the response without adding a
+  label filter — `labels` non-empty also forces label-field selection as a defensive
+  invariant; or `issue(id:)` per id (full, fanned concurrently)
+
+| `Issue`
+| `create_issue`
+| `:create`
+| create
+| `Linear.Issue.Create`
+| `issueCreate(input: { title, description, teamId, labelIds?, projectId? })` mutation
+
+| `Issue`
+| `assign_issue`
+| `:assign`
+| update
+| `Linear.Issue.Update.Assign`
+| `issueUpdate(id:, input: { assigneeId, stateId? })` via `Issue.Update.run/2`
+
+| `Issue`
+| `attach_issue_to_project`
+| `:attach_to_project`
+| update
+| `Linear.Issue.Update.AttachToProject`
+| `issueUpdate(id:, input: { projectId })` via `Issue.Update.run/2`
+
+| `Issue`
+| `close_issue`
+| `:close`
+| update
+| `Linear.Issue.Update.Close`
+| `issueUpdate(id:, input: { stateId })` via `Issue.Update.run/2`, then
+`issueArchive(id:, trash: true)` when requested
+
+| `Issue`
+| `set_issue_status`
+| `:set_status`
+| update
+| `Linear.Issue.Update.SetStatus`
+| `issueUpdate(id:, input: { stateId })` via `Issue.Update.run/2`
+
+| `IssueRelation`
+| `issue_relations`
+| `:list`
+| read
+| `Linear.IssueRelation.Read.List`
+| `issue(id: $issueId) { relations(first:, after:) { edges { node { ... } cursor } pageInfo { ... } } }` and same for `inverseRelations`, fetched concurrently; paginated up to 100 per direction. Each relation node's `issue` and `relatedIssue` endpoints are fetched with `IssueRelation.endpoint_fields/0` (`id identifier title url state { name }`) — the nested `state { name }` field was added to support the `--graph` dependency graph display.
+
+| `IssueRelation`
+| `create_issue_relation`
+| `:create`
+| create
+| `Linear.IssueRelation.Create`
+| `issueRelationCreate(input: { issueId, relatedIssueId, type })` mutation; returns `issueRelation { id type issue { ... } relatedIssue { ... } }`. Arguments: `issue_id` (string), `related_issue_id` (string), `type` (string, wire GraphQL enum value: `blocks`, `related`, `duplicate`). The `:create` action always receives the wire-direction values; `blocked-by` reversal happens in the CLI layer. Duplicate relation errors from Linear are surfaced to the CLI as `{:duplicate_relation, message}`.
+
+| `IssueRelation`
+| `delete_issue_relation`
+| `:destroy`
+| destroy
+| `Linear.IssueRelation.Destroy`
+| `issueRelationDelete(id: $id)` mutation returning `DeletePayload { success entityId }`. Takes an `IssueRelation` struct as its argument; the relation UUID is read from `changeset.data.id`. The CLI layer resolves the exact relation (by listing the subject issue's relations and matching by wire type, direction, and endpoint identifier) before calling this interface, so no resolution logic lives in the domain layer.
+
+| `Label`
+| `labels_by_names`
+| `:by_names`
+| read
+| `Linear.Label.Read.ByNames`
+| `issueLabels(filter: { name: { in: $names } })` edges
+
+| `Label`
+| `labels_by_team`
+| `:by_team`
+| read
+| `Linear.Label.Read.ByTeam`
+| `team(id: $teamId) { labels(first: 100, filter: ...) }` — server and client filtered
+
+| `WorkflowState`
+| `workflow_states_by_team`
+| `:by_team`
+| read
+| `Linear.WorkflowState.Read.ByTeam`
+| `team(id: $teamId) { states { nodes { ... } } }`
+
+| `Comment`
+| `add_comment`
+| `:create`
+| create
+| `Linear.Comment.Create`
+| `commentCreate(input: { issueId, body })` mutation
+
+| `ProjectUpdate`
+| `post_project_update`
+| `:create`
+| create
+| `Linear.ProjectUpdate.Create`
+| `projectUpdateCreate(input: { projectId, body, health? })` mutation
+
+|===
+
+== Shared helpers
+
+=== `LinearCli.Linear.Issue.Update`
+
+`app/lib/linear_cli/linear/issue.ex` — not an Ash module; a plain
+module with a single `run/2` function.
+
+All four issue-update actions (`:assign`, `:attach_to_project`, `:close`,
+`:set_status`) delegate to this shared runner rather than each building
+their own `issueUpdate` mutation.  `run/2` calls the mutation, receives
+the updated issue map, and decodes it via `Issue.from_map/1` using
+`Issue.full_fields/0` (the full fragment including assignee, team,
+comments, and labels).
+
+The mutation GraphQL document is built at call time (not a module
+attribute) because `Issue.full_fields/0` references `User`, `Team`, and
+`Comment` — cross-file module-attribute evaluation order is not guaranteed
+at compile time.
+
+=== `LinearCli.Linear.IssueRelation.endpoint_fields/0` and `relation_fields/0`
+
+`app/lib/linear_cli/linear/issue_relation.ex` — module-level helpers that
+return GraphQL field-selection strings, used everywhere a relation node is
+fetched.
+
+`endpoint_fields/0` returns `"id identifier title url state { name }"` —
+the fragment for each issue endpoint (`issue` and `relatedIssue`) inside a
+relation node.  The `state { name }` subfield was added to support the
+`--graph` dependency graph display, which needs workflow status for each node.
+
+`relation_fields/0` composes `endpoint_fields/0` into the full relation
+node fragment: `"id type issue { ... } relatedIssue { ... }"`.
+
+Both functions are evaluated at call time (not module attributes) to avoid
+compile-time cross-file evaluation ordering issues.
+
+=== `LinearCli.CLI.Commands.Issues.Graph`
+
+`app/lib/linear_cli/cli/commands/issues/graph.ex` — pure BFS traversal
+that builds a transitive dependency graph from a root issue identifier.
+
+`build/2` accepts `(root_identifier, root_issue)` where `root_issue` is the
+already-fetched `Issue` struct (reusing the `issue view` fetch to avoid a
+redundant API call). It traverses `blocks` relations in both directions via
+`Linear.issue_relations/1`, visiting each identifier at most once (cycle-safe),
+and returns `{:ok, %{root:, nodes:, edges:}}` or `{:error, {identifier, reason}}`.
+Capped at 100 nodes; deterministic output (nodes sorted by identifier, edges
+by source then target).
+
+=== `LinearCli.Linear.Paginate`
+
+`app/lib/linear_cli/linear/paginate.ex` — a standalone helper module.
+
+Provides `all/5`: fetches cursor-paginated GraphQL connections
+(`edges { node { ... } cursor } pageInfo { hasNextPage endCursor }`)
+until `max` records are collected or the API signals no more pages.
+Used by:
+
+* `Team.Read.All` — `teams(first:, after:)` paginated query
+* `Project.Read.All` — `projects(first:, after:)` paginated query
+* `Issue.Read.List` — `issues(filter:, first:, after:)` paginated list
+  (the find-by-ids path fans out individual `issue(id:)` calls instead)
+
+== Maintenance contract
+
+*This document must be updated in the same change as any of the following:*
+
+* A new Ash resource is added to `LinearCli.Linear` (or an existing one
+  is removed or renamed).
+* A new action is added to any resource, or an existing action's name,
+  type, arguments, or manual module changes.
+* A new domain code interface is defined (or an existing one is removed
+  or renamed).
+* An association attribute (`:term` or `{:array, :term}` field holding
+  another resource's struct) is added, removed, or renamed on any
+  resource.
+* A shared helper (`Issue.Update`, `Paginate`, or any future equivalent)
+  is added, removed, or materially changes its role.
+* Any declared Ash `relationships do` block is added to any resource
+  (currently none exist; the distinction from GraphQL/nested-data
+  associations must be kept accurate).
+
+Historical rationale for changes belongs in the relevant phase-plan
+document under `documents/`, not here.  This document records current
+state only.

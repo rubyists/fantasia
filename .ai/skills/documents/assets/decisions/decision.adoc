@@ -1,0 +1,38 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Sep 21, 2026
+:my-title: Documentation location and format
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+:toc:
+:status: Accepted
+
+== Decision
+
+Store Fantasia project documents in `documents/` at the repository root.
+Use AsciiDoc and the `.adoc` extension for authored prose.
+
+Store decisions in `documents/decisions/`. Store plans and implementation
+notes in `documents/plans/`. Store agent learning entries in
+`documents/agent_learnings/`. Keep only document indexes at `documents/`.
+
+Use lowercase kebab-case names. Preserve a numeric prefix when a document
+series requires one.
+
+Every new document has the standard title, author, revision date, Font Awesome
+icons, and GitHub icon captions.
+
+== Rationale
+
+One document root gives readers a predictable place to start. Subdirectories
+group documents by purpose without mixing project prose with source files.
+
+AsciiDoc supports the repository's tables, admonitions, source blocks, and
+GitHub rendering without a separate Markdown convention.

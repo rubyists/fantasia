@@ -33,10 +33,24 @@ Use `mise exec -- mix lc [LC_ARGS...]` for Linear operations. The task delegates
 
 Fantasia issues belong to the `EXT` team and the `Fantasia` project.
 
-## Planning documents
+## Documents
+
+Use the link:vendor/claude-plain-english-skill/skills/simple-english[`simple-english`] skill when
+authoring technical documentation or instructions.
+
+Use the link:vendor/claude-plain-english-skill/skills/plain-english[`plain-english`] skill when
+authoring non-technical documentation, marketing copy, or other content intended for a general audience.
+
+Do not apply both to the same text. Use `plain-english` for general audience content and `simple-english`
+for technical content.
+
+### Planning documents
 
 - `documents/plans/pre-phase-1-plan.adoc` describes the vendored Python bootstrap.
 - `documents/plans/initial-plan.adoc` describes the initial Elixir port and Fantasia release.
+
+### Decision documents
+
 - `documents/decisions/repository-management-mix-tasks-decision.adoc` records where repository-wide Mix tasks
   live and defines their discovery contract.
 - `documents/decisions/0008-managed-toolchain-refresh.adoc` records the accepted mise dependency refresh

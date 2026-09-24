@@ -42,3 +42,6 @@
 	path = vendor/linear-cli
 	url = git@github.com:rubyists/linear-cli
 	branch = main
+[submodule "vendor/claude-plain-english-skill"]
+	path = vendor/claude-plain-english-skill
+	url = git@github.com:b1rdmania/claude-plain-english-skill
