@@ -1,0 +1,202 @@
+= DevEx CI and release-please plan
+:status: proposed
+:date: 2026-09-17
+
+== Purpose
+
+Establish one local and GitHub quality gate for Fantasia, then add
+release-please to maintain reviewable version-and-changelog pull requests.
+This is DevEx infrastructure for the current development phases; it is not the
+Phase 6 publishing pipeline.
+
+The implementation should reuse the shape of +vendor/linear-cli+ where it
+fits: a reusable CI workflow, a root-level +mix ci+ entrypoint, a main-branch
+orchestrator, and a manifest-based release-please configuration. Fantasia's
+umbrella layout, pinned mise toolchain, recursive submodules, and unsigned
+Phase 0 escript contract are authoritative where they differ.
+
+== Current state
+
+* +.github/workflows/phase0.yaml+ runs format, test, and +mix phase0.verify+
+  on Linux x86_64 and macOS arm64 after a recursive, full-history checkout.
+* The root +mix.exs+ has +mix setup+, but no +mix ci+ entrypoint.
+* +.version.txt+ is the single version source for the umbrella and
+  +repo_management+ application.
+* Phase 1 replay histories are committed evidence. +mix phase1.histories+
+  checks them; +--write+ is an explicit regeneration operation.
+* No Fantasia release-please configuration, release manifest, or CHANGELOG
+  exists yet.
+
+== Decisions proposed by this plan
+
+=== One authoritative quality command
+
++mise exec -- mix ci+ is the developer and CI entrypoint. GitHub Actions must
+install the pinned mise toolchain and invoke that exact command rather than
+repeating the quality commands in YAML. Setup remains separate: a clean
+checkout runs +mise exec -- mix setup+ before +mix ci+.
+
+The initial +mix ci+ contract is deliberately small and executable today:
+
+. +mix format --check-formatted+;
+. +mix test+ for the umbrella;
+. +mix phase0.verify+;
+. +mix phase1.histories+ in its non-writing verification mode.
+
+The task belongs in +apps/repo_management+ because it coordinates repository
+concerns, not application runtime behavior. It should orchestrate the existing
+Mix commands and fail at the first failed gate. Its tests must prove command
+order and failure propagation without re-running the full suite.
+
+Future phase-specific checks join this command only when they are deterministic,
+offline, and usable from a clean recursive checkout. In particular, no live
+Linear, GitHub, Claude, Codex, or network-backed Stokowski dry run belongs in
+the default CI gate: those require credentials or external mutable state.
+
+=== Reusable GitHub CI
+
+Replace the phase-specific workflow with +.github/workflows/ci.yaml+, modeled
+on Linear CLI's reusable CI workflow. It will trigger for pull requests and be
+callable from the main workflow. The initial matrix retains the existing
+required Phase 0 hosts: Linux x86_64 and macOS arm64.
+
+Each matrix leg must:
+
+* check out the contributor head for pull requests, with full Git history and
+  recursive submodules;
+* ensure required submodules are not shallow when a check needs their history;
+* install versions from +mise.toml+ through +jdx/mise-action+;
+* assert the expected runner architecture; and
+* run +mise exec -- mix setup+ followed by +mise exec -- mix ci+.
+
+Start with read-only permissions and dependency/build caching keyed by the
+relevant lockfiles and toolchain configuration. Do not import Linear CLI's
+Burrito change detection or packaging jobs: Fantasia has not selected that
+artifact format.
+
+The first slice must also impose Linear CLI's conventional-commit subject and PR
+title checks. Those are a prerequisite for all commits and PRs in our repositoried.
+Release-please's commit parsing must be aligned with that policy.
+
+=== Release-please manages a full 0.x.x release
+
+Add a main-branch workflow, modeled on +vendor/linear-cli/.github/workflows/main.yaml+:
+
+. call the reusable CI workflow after a push to +main+;
+. only after CI succeeds, run +googleapis/release-please-action@v5+ to open or
+   update the one pending release PR; and
+. use +skip-github-release: true+.
+
+The action will maintain the version bump, manifest, and +CHANGELOG.md+ in a
+normal reviewable PR. Merging that PR will create a GitHub Release, but not
+the binary artifact, SBOM, checksum, or Homebrew update. This implements
+part of ADR 0005, the initial plan's Phase 6 boundary is still responsible
+for those artifacts.
+
+The workflow needs only the minimum write permissions necessary to create and
+update that PR. Use a dedicated +RELEASE_PLEASE_TOKEN+ secret rather than
+assuming +GITHUB_TOKEN+ behavior will satisfy repository rules and downstream
+workflow triggering. Document its required repository permissions and bot
+identity; never expose it in logs. The CI workflow remains read-only.
+
+=== Version and changelog files
+
+Add the following repository-root files:
+
+* +.release-please-config.json+, using the +simple+ release type, +.version.txt+
+  as +version-file+, and +CHANGELOG.md+ as +changelog-path+;
+* +.release-please-manifest.json+, seeded from the current +.version.txt+;
+* +CHANGELOG.md+, initialized in the form expected by release-please.
+
+The configuration must update every tracked source that embeds the public
+version. Today that is +.version.txt+; the implementation must verify whether
+the root documentation contains a release version before listing it as an
+extra file. The root and +repo_management+ Mix projects already read
++.version.txt+ dynamically, so their +mix.exs+ files must not be copied from
+Linear CLI's static-version +extra-files+ list.
+
+Release-please's generated PR is subject to the same human review and merge
+rules as any other pull request. It does not authorize bot merging.
+
+== Implementation slices
+
+=== DEVEX-1: Specify and implement +mix ci+
+
+Create a dependency-free repository Mix task and tests for the initial command
+contract. Update the developer documentation with the clean-checkout sequence:
++mise exec -- mix setup+ then +mise exec -- mix ci+.
+
+Acceptance:
+
+* +mise exec -- mix ci+ runs the four stated gates in order;
+* a failing gate returns a non-zero status and prevents later gates; and
+* +mix phase1.histories+ cannot rewrite fixtures during CI.
+
+=== DEVEX-2: Migrate Phase 0 CI into reusable CI
+
+Replace +phase0.yaml+ with +ci.yaml+ while preserving the current host matrix,
+recursive checkout, architecture assertions, and Phase 0 smoke coverage.
+Make it callable so other workflows do not duplicate validation logic.
+
+Acceptance:
+
+* pull-request CI runs +mise exec -- mix ci+ on both required hosts;
+* a push/main caller can reuse the workflow; and
+* no workflow step duplicates an individual gate now owned by +mix ci+.
+
+=== DEVEX-3: Add and validate release-please metadata
+
+Add the configuration, manifest, and initial changelog. Verify that the
+manifest version matches +.version.txt+ and that a representative conventional
+commit produces the expected proposed version and changelog entry in a
+non-mutating test or action dry run.
+
+Acceptance:
+
+* version sources remain synchronized after a generated release PR
+* release-please changes only intended root release metadata
+
+=== DEVEX-4: Add the main-branch release-PR manager
+
+Add the minimal +main.yaml+ orchestrator: invoke reusable CI, then manage the
+release PR on successful pushes to +main+. Configure the dedicated secret and
+least-privilege permissions in repository settings and document the setup.
+
+Acceptance:
+
+* ordinary main pushes open or update at most one pending release PR;
+* failed validation cannot invoke release-please;
+* the release manager remains recoverable after a failed or manually repaired
+  release PR.
+
+=== DEVEX-5: Prepare the Phase 6 extension point
+
+Record, but do not implement, the handoff from a merged release PR to the
+Phase 6 native-artifact, SBOM, container, checksum, and Homebrew pipeline. The
+future job must run only after actual artifact selection and the Phase 5 exit
+criteria are satisfied.
+
+== Verification and rollout
+
+Before merging each slice:
+
+* run +mise exec -- mix setup+ and +mise exec -- mix ci+ from a clean recursive
+  checkout;
+* validate workflow YAML and exercise reusable-workflow inputs with a branch
+  or GitHub Actions test run;
+* inspect the release-please PR diff for version, manifest, and changelog
+  consistency; and
+* confirm the GitHub Release exists, with no binary artifacts
+
+Roll out in the listed order. DEVEX-1 and DEVEX-2 establish trustworthy
+validation before the release manager gets write authority. DEVEX-3 is safe to
+review without enabling it; DEVEX-4 enables it after the token and branch
+protections are confirmed.
+
+== Non-goals
+
+This plan does not select or build a native distribution, publish Phase 0's
+unsigned escript, generate checksums/SBOMs, or update the
+Homebrew tap. Those remain Phase 6 or a
+separate policy decision. It _does_ add the commit message/PR title constraints,
+as we want that to be enforced as early as possible, not wait for phase 6.
