@@ -147,14 +147,19 @@ defmodule Stokowski.CompatibilityTest do
     commit_rows = inventory["commits"]
     expected_commits = Enum.map(commit_rows, & &1["sha"])
 
-    assert {checkout, 0} = System.cmd("git", ["-C", vendor, "rev-parse", "HEAD"])
-    assert String.trim(checkout) == pin
+    assert {_output, 0} =
+             System.cmd("git", ["-C", vendor, "cat-file", "-e", "#{pin}^{commit}"],
+               stderr_to_stdout: true
+             )
+
     assert List.last(expected_commits) == pin
     assert length(expected_commits) == MapSet.size(MapSet.new(expected_commits))
 
-    # actions/checkout intentionally leaves a submodule with only its pinned object.
+    # This is a point-in-time audit: `pin` documents history up to a past commit,
+    # not the vendor's current HEAD, so the submodule can advance without touching
+    # this fixture. We only require that `pin` still exists in the vendored history.
     # Compare the exact ancestry whenever the baseline object is available locally;
-    # the fixture's structural and checkout-pin assertions still run in shallow CI.
+    # the fixture's structural assertions still run in shallow CI.
     case System.cmd("git", ["-C", vendor, "cat-file", "-e", "#{baseline}^{commit}"],
            stderr_to_stdout: true
          ) do
