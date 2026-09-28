@@ -14,7 +14,7 @@ linear_states:
   terminal: [Done, Closed, Cancelled, Canceled, Duplicate]
 
 polling:
-  interval_ms: 15000
+  interval_ms: 30000
 
 workspace:
   root: ~/.local/share/stokowski/workspaces/fantasia
@@ -24,10 +24,41 @@ hooks:
     git clone --depth 1 --recursive git@github.com:rubyists/fantasia .
     mise trust
     mise install
+    mise exec -- mix deps.get
     mise exec -- mix setup
   before_run: |
-    git fetch origin main
-    git rebase origin/main 2>/dev/null || git rebase --abort
+    # Best-effort refresh onto origin/main. A failed hook fails the whole agent
+    # run, so only a rebase that cannot be cleaned up is fatal.
+    if ! git fetch origin main; then
+      echo "before_run: git fetch origin main failed; skipping rebase" >&2
+      exit 0
+    fi
+    if ! changes="$(git status --porcelain)"; then
+      echo "before_run: git status failed; skipping rebase" >&2
+      exit 0
+    fi
+    if [ -n "$changes" ]; then
+      echo "before_run: preserving uncommitted workspace changes; skipping rebase"
+      exit 0
+    fi
+    # A branch that tracks a remote branch (main, or a pushed PR branch) is
+    # shared history: fast-forward it to its own upstream and never rewrite
+    # it. Rebasing a PR branch onto main drops its merge commits and leaves
+    # the workspace diverged from the PR. Only an unpushed branch rebases.
+    if git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' >/dev/null 2>&1; then
+      if ! git pull --ff-only; then
+        echo "before_run: cannot fast-forward to the upstream branch; leaving it as is" >&2
+      fi
+      exit 0
+    fi
+    if ! git rebase origin/main; then
+      echo "before_run: rebase onto origin/main failed; aborting it" >&2
+      if ! git rebase --abort; then
+        echo "before_run: git rebase --abort failed; the workspace needs manual repair" >&2
+        exit 1
+      fi
+    fi
+    exit 0
   timeout_ms: 240000
 
 claude:
