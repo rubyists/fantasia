@@ -29,11 +29,12 @@ defmodule Mix.Tasks.Stokowski do
     ensure_vendor!(vendor)
     validate_api_key!(workflow)
 
-    resolved_runners = resolve_configured_runners!(workflow, root)
+    mise = mise_executable!()
+    resolved_runners = resolve_configured_runners!(workflow, root, mise)
     uv = executable!("uv")
 
-    runner_executables =
-      Enum.map(resolved_runners, fn {_runner, {executable, _version}} -> executable end)
+    path_executables =
+      [mise | Enum.map(resolved_runners, fn {_runner, {executable, _version}} -> executable end)]
 
     Enum.each(resolved_runners, fn {runner, {executable, version}} ->
       Mix.shell().info("Using #{String.capitalize(runner)} #{version} at #{executable}")
@@ -48,7 +49,7 @@ defmodule Mix.Tasks.Stokowski do
       try do
         System.cmd(uv, command_args,
           cd: root,
-          env: [{"PATH", prepend_path(runner_executables)}],
+          env: [{"PATH", prepend_path(path_executables)}],
           stderr_to_stdout: true,
           into: IO.stream(:stdio, :line)
         )
@@ -70,8 +71,11 @@ defmodule Mix.Tasks.Stokowski do
 
   @doc false
   def resolve_runner!(root, runner) when runner in ["codex", "claude"] do
+    resolve_runner!(root, runner, mise_executable!())
+  end
+
+  defp resolve_runner!(root, runner, mise) do
     expected_version = configured_runner_version!(Path.join(root, "mise.toml"), runner)
-    mise = executable!("mise")
 
     case System.cmd(mise, ["which", runner], cd: root) do
       {output, 0} ->
@@ -132,7 +136,20 @@ defmodule Mix.Tasks.Stokowski do
     end
   end
 
-  defp resolve_configured_runners!(workflow, root) do
+  defp mise_executable! do
+    local_mise =
+      case System.get_env("HOME") do
+        home when is_binary(home) and home != "" ->
+          System.find_executable(Path.join([home, ".local", "bin", "mise"]))
+
+        _missing_home ->
+          nil
+      end
+
+    local_mise || executable!("mise")
+  end
+
+  defp resolve_configured_runners!(workflow, root, mise) do
     runner_names =
       case Workflow.read(workflow) do
         {:ok, parsed_workflow} -> Workflow.runner_values(parsed_workflow) |> Enum.uniq()
@@ -146,7 +163,7 @@ defmodule Mix.Tasks.Stokowski do
         Mix.raise("workflow.yaml uses unsupported runner #{inspect(runner)}")
       end
 
-      {runner, resolve_runner!(root, runner)}
+      {runner, resolve_runner!(root, runner, mise)}
     end)
   end
 

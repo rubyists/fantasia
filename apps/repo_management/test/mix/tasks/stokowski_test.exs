@@ -42,6 +42,25 @@ defmodule Mix.Tasks.StokowskiTest do
   end
 
   @tag :tmp_dir
+  test "prefers user-local mise and prepends it to the runner path", %{tmp_dir: tmp_dir} do
+    {root, vendor, _invocation} = fake_checkout(tmp_dir, 0)
+
+    capture_io(fn -> StokowskiTask.run([], root) end)
+
+    path =
+      vendor
+      |> Path.join("path.log")
+      |> File.read!()
+      |> String.trim()
+      |> String.split(":")
+
+    assert Enum.take(path, 2) == [
+             Path.join([tmp_dir, "home", ".local", "bin"]),
+             Path.join(tmp_dir, "runner-bin")
+           ]
+  end
+
+  @tag :tmp_dir
   test "reports a nonzero exit and still removes the generated lockfile", %{tmp_dir: tmp_dir} do
     {root, vendor, _invocation} = fake_checkout(tmp_dir, 23)
 
@@ -151,7 +170,7 @@ defmodule Mix.Tasks.StokowskiTest do
   @tag :tmp_dir
   test "accepts prerelease Claude pins", %{tmp_dir: tmp_dir} do
     {root, _vendor, _invocation} = fake_checkout(tmp_dir, 0)
-    claude = Path.join(tmp_dir, "bin/claude")
+    claude = Path.join(tmp_dir, "runner-bin/claude")
 
     File.write!(claude, "#!/bin/sh\nprintf '%s\\n' '2.1.270-rc.1 (Claude Code)'\n")
     File.chmod!(claude, 0o755)
@@ -188,10 +207,15 @@ defmodule Mix.Tasks.StokowskiTest do
     root = Path.join(tmp_dir, "repo")
     vendor = Path.join([root, "vendor", "stokowski"])
     bin = Path.join(tmp_dir, "bin")
+    home = Path.join(tmp_dir, "home")
+    mise_bin = Path.join([home, ".local", "bin"])
+    runner_bin = Path.join(tmp_dir, "runner-bin")
     invocation = Path.join(vendor, "invocation.log")
 
     File.mkdir_p!(vendor)
     File.mkdir_p!(bin)
+    File.mkdir_p!(mise_bin)
+    File.mkdir_p!(runner_bin)
     File.write!(Path.join(root, "workflow.yaml"), "tracker: {kind: linear}\n")
 
     File.write!(
@@ -209,6 +233,7 @@ defmodule Mix.Tasks.StokowskiTest do
         pwd
         printf '%s\\n' "$@"
       } > "$3/invocation.log"
+      printf '%s\\n' "$PATH" > "$3/path.log"
       : > "$3/uv.lock"
       printf 'fake uv stdout\\n'
       printf 'fake uv stderr\\n' >&2
@@ -216,14 +241,14 @@ defmodule Mix.Tasks.StokowskiTest do
       """
     )
 
-    codex = Path.join(bin, "codex")
+    codex = Path.join(runner_bin, "codex")
     write_executable!(codex, "#!/bin/sh\nprintf '%s\\n' '#{codex_version}'\n")
 
-    claude = Path.join(bin, "claude")
+    claude = Path.join(runner_bin, "claude")
     write_executable!(claude, "#!/bin/sh\nprintf '%s\\n' '2.1.270 (Claude Code)'\n")
 
     write_executable!(
-      Path.join(bin, "mise"),
+      Path.join(mise_bin, "mise"),
       """
       #!/bin/sh
       case "$1 $2" in
@@ -234,14 +259,24 @@ defmodule Mix.Tasks.StokowskiTest do
       """
     )
 
+    write_executable!(Path.join(bin, "mise"), "#!/bin/sh\nexit 86\n")
+
     original_path = System.get_env("PATH")
+    original_home = System.get_env("HOME")
     System.put_env("PATH", Enum.join([bin, original_path], ":"))
+    System.put_env("HOME", home)
 
     on_exit(fn ->
       if original_path do
         System.put_env("PATH", original_path)
       else
         System.delete_env("PATH")
+      end
+
+      if original_home do
+        System.put_env("HOME", original_home)
+      else
+        System.delete_env("HOME")
       end
     end)
 
