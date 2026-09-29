@@ -97,7 +97,7 @@ states:
     transitions:
       approve: improvement
 
-  # Mechanical: acts only on explicitly approved Glean candidate IDs.
+  # Mechanical: creates the approved Glean follow-ups, then checks the PR.
   improvement:
     type: agent
     prompt: .ai/prompts/improvement.md
@@ -109,6 +109,7 @@ states:
     session: fresh
     transitions:
       complete: merge
+      blocked: merge-review
 
   # Mechanical: independently re-check approvals and CI, then merges.
   merge:
@@ -122,6 +123,17 @@ states:
     session: fresh
     transitions:
       complete: done
+      blocked: merge-review
+
+  # Parks the issue when improvement or merge reports the PR cannot merge yet.
+  # Approve once the PR is mergeable to run merge; rework reruns improvement.
+  merge-review:
+    type: gate
+    linear_state: review
+    rework_to: improvement
+    max_rework: 5
+    transitions:
+      approve: merge
 
   done:
     type: terminal
