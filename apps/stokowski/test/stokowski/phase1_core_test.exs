@@ -171,7 +171,10 @@ defmodule Stokowski.Phase1CoreTest do
       "{{ issue.identifier }} {{ issue_labels | lower }} {% if issue.description %}bad{% else %}missing{% endif %}"
 
     assert Prompt.render(template, Prompt.context(issue)) == "EXT-1 bug, spike missing"
-    refute Prompt.render("{{ File.read! }}", Prompt.context(issue)) =~ "File"
+
+    assert_raise Solid.TemplateError, fn ->
+      Prompt.render("{{ File.read! }}", Prompt.context(issue))
+    end
   end
 
   test "tracking reads both formats, orders equal timestamps stably, and writes v1 only" do

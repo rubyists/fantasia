@@ -34,6 +34,7 @@ defmodule Stokowski.MixProject do
     [
       {:continuum, path: "../../vendor/Continuum"},
       {:jason, "~> 1.4"},
+      {:solid, "~> 1.3"},
       {:yaml_elixir, "~> 2.12"}
     ]
   end

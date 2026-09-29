@@ -1,24 +1,25 @@
 defmodule Stokowski.Prompt do
-  @moduledoc "Safe, deliberately small prompt renderer and lifecycle assembler."
+  @moduledoc "Safe Liquid prompt rendering and lifecycle assembly."
 
   use Continuum.Pure
 
   alias Stokowski.Domain.{Issue, Phase, PhaseState, WorkflowSnapshot}
+  alias Stokowski.Prompt.Filters
   alias Stokowski.Report
 
   @report_contract Report.contract()
   @machine_marker ~r/<!--\s*(?:stokowski:|fantasia:v1:)/
 
-  @token ~r/(\{\{.*?\}\}|\{%.*?%\})/s
-
-  @doc "Render the supported prompt subset without evaluating arbitrary code."
+  @doc "Render a Liquid prompt without evaluating arbitrary Elixir code."
   @spec render(binary(), map()) :: binary()
   def render(template, context) when is_binary(template) and is_map(context) do
     template
-    |> tokenize()
-    |> render_nodes(context)
-    |> List.flatten()
-    |> Enum.join()
+    |> Solid.parse!()
+    |> Solid.render!(normalize_template_value(context),
+      custom_filters: Filters,
+      strict_filters: true
+    )
+    |> to_string()
   end
 
   @doc "Build the nested and flat context accepted by legacy prompt examples."
@@ -176,146 +177,6 @@ defmodule Stokowski.Prompt do
     |> Enum.join("\n")
   end
 
-  defp tokenize(template), do: Regex.split(@token, template, include_captures: true)
-
-  defp render_nodes(tokens, context), do: parse_nodes(tokens, context, []) |> elem(0)
-
-  defp parse_nodes([], _context, _stop), do: {[], [], nil}
-
-  defp parse_nodes([token | rest], context, stop) do
-    case directive(token) do
-      {:if, expression} ->
-        {truthy_nodes, after_truthy, marker} = parse_nodes(rest, context, [:else, :endif])
-
-        {false_nodes, after_false, false_marker} =
-          case marker do
-            :else ->
-              parse_nodes(drop_first(after_truthy), context, [:endif])
-
-            _ ->
-              {[], after_truthy, marker}
-          end
-
-        remaining =
-          cond do
-            marker == :endif -> drop_first(after_truthy)
-            false_marker == :endif -> drop_first(after_false)
-            true -> after_false
-          end
-
-        chosen = if truthy?(resolve(expression, context)), do: truthy_nodes, else: false_nodes
-        {tail, remaining, stop_marker} = parse_nodes(remaining, context, stop)
-        {chosen ++ tail, remaining, stop_marker}
-
-      {:else, _} ->
-        if :else in stop do
-          {[], [token | rest], :else}
-        else
-          {tail, remaining, marker} = parse_nodes(rest, context, stop)
-          {[token | tail], remaining, marker}
-        end
-
-      {:endif, _} ->
-        if :endif in stop do
-          {[], [token | rest], :endif}
-        else
-          {tail, remaining, marker} = parse_nodes(rest, context, stop)
-          {[token | tail], remaining, marker}
-        end
-
-      :text ->
-        {tail, remaining, marker} = parse_nodes(rest, context, stop)
-        {[token | tail], remaining, marker}
-
-      :expression ->
-        {tail, remaining, marker} = parse_nodes(rest, context, stop)
-        {[render_expression(String.slice(token, 2..-3//1), context) | tail], remaining, marker}
-    end
-  end
-
-  defp drop_first([_ | rest]), do: rest
-  defp drop_first([]), do: []
-
-  defp directive(token) do
-    cond do
-      String.starts_with?(token, "{{") ->
-        :expression
-
-      String.starts_with?(token, "{%") ->
-        expression =
-          token |> String.trim_leading("{%") |> String.trim_trailing("%}") |> String.trim()
-
-        case String.split(expression, ~r/\s+/, parts: 2) do
-          ["if", condition] -> {:if, condition}
-          ["else"] -> {:else, nil}
-          ["endif"] -> {:endif, nil}
-          _ -> :text
-        end
-
-      true ->
-        :text
-    end
-  end
-
-  defp render_expression(expression, context) do
-    expression
-    |> String.trim()
-    |> String.split("|", trim: true)
-    |> case do
-      [path | filters] ->
-        filters
-        |> Enum.reduce(resolve(String.trim(path), context), fn filter, value ->
-          apply_filter(String.trim(filter), value)
-        end)
-        |> format_value()
-
-      _ ->
-        ""
-    end
-  end
-
-  defp apply_filter("lower", value), do: lower(value)
-  defp apply_filter("lower()", value), do: lower(value)
-  defp apply_filter(_unknown, value), do: value
-
-  defp lower(value) when is_list(value), do: Enum.map(value, &lower/1)
-  defp lower(value) when is_binary(value), do: String.downcase(value)
-  defp lower(value), do: value
-
-  defp resolve(expression, context) do
-    expression = String.trim(expression)
-
-    cond do
-      expression in ["true", "True"] ->
-        true
-
-      expression in ["false", "False"] ->
-        false
-
-      expression in ["none", "None", "nil"] ->
-        nil
-
-      String.starts_with?(expression, "\"") and String.ends_with?(expression, "\"") ->
-        String.slice(expression, 1..-2//1)
-
-      true ->
-        expression
-        |> String.split(".")
-        |> Enum.reduce(context, fn key, value -> lookup(value, key) end)
-    end
-  end
-
-  defp lookup(value, key) when is_map(value),
-    do: Map.get(value, key, Map.get(value, safe_atom(key), ""))
-
-  defp lookup(_value, _key), do: ""
-
-  defp safe_atom(key) do
-    String.to_existing_atom(key)
-  rescue
-    ArgumentError -> nil
-  end
-
   defp format_value(:unavailable), do: ""
   defp format_value({:unavailable, _reason}), do: ""
   defp format_value(nil), do: ""
@@ -324,6 +185,20 @@ defmodule Stokowski.Prompt do
   defp format_value(value) when is_list(value), do: Enum.map_join(value, ", ", &format_value/1)
   defp format_value(value) when is_map(value), do: inspect(value)
   defp format_value(value), do: to_string(value)
+
+  defp normalize_template_value(:unavailable), do: nil
+  defp normalize_template_value({:unavailable, _reason}), do: nil
+  defp normalize_template_value(""), do: nil
+  defp normalize_template_value([]), do: nil
+  defp normalize_template_value(%{} = value) when map_size(value) == 0, do: nil
+
+  defp normalize_template_value(%{} = value),
+    do: Map.new(value, fn {key, item} -> {key, normalize_template_value(item)} end)
+
+  defp normalize_template_value(value) when is_list(value),
+    do: Enum.map(value, &normalize_template_value/1)
+
+  defp normalize_template_value(value), do: value
 
   defp issue_map(%_{} = issue), do: issue |> Map.from_struct() |> issue_map()
 
