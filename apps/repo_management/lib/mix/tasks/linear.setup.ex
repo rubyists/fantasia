@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Linear.Setup do
   end
 
   @doc false
-  def run(args, root) do
+  def run(args, root, runner \\ &run_deps_get/2) do
     if args != [] do
       Mix.raise("mix linear.setup does not accept arguments")
     end
@@ -33,7 +33,8 @@ defmodule Mix.Tasks.Linear.Setup do
       )
     end
 
-    unless File.regular?(Path.join(app, "mix.exs")) do
+    unless File.regular?(Path.join(checkout, "mix.exs")) and
+             File.regular?(Path.join(app, "mix.exs")) do
       Mix.raise(
         "vendor/linear-cli is incomplete; run git submodule update --init --recursive vendor/linear-cli"
       )
@@ -41,20 +42,31 @@ defmodule Mix.Tasks.Linear.Setup do
 
     mix = System.find_executable("mix") || Mix.raise("could not find mix on PATH")
 
-    Mix.shell().info("Fetching vendored Linear CLI dependencies")
+    for {label, dir} <- [
+          {"vendored Linear CLI repository tasks", checkout},
+          {"vendored Linear CLI application", app}
+        ] do
+      Mix.shell().info("Fetching #{label} dependencies")
 
+      status = runner.(mix, dir)
+
+      if status != 0 do
+        Mix.raise("#{label} dependency setup exited with status #{status}")
+      end
+    end
+
+    :ok
+  end
+
+  defp run_deps_get(mix, dir) do
     {_output, status} =
       System.cmd(mix, ["deps.get"],
-        cd: app,
+        cd: dir,
         into: IO.stream(:stdio, :line),
         stderr_to_stdout: true
       )
 
-    if status != 0 do
-      Mix.raise("vendored Linear CLI dependency setup exited with status #{status}")
-    end
-
-    :ok
+    status
   end
 
   defp repository_root do

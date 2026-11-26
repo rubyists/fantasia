@@ -1,0 +1,51 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Nov 26, 2026
+:my-title: ADR 0010: Phase 2 tracker attachments and GitHub token allowlist
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+:tracker-decision: pluggable-cli-tracker-interface-decision.adoc[the pluggable CLI tracker decision]
+:runner-lifecycle-decision: 0003-runner-permissions-session-and-lifecycle.adoc[ADR 0003]
+:post-b80-decision: 0006-post-b80-stokowski-feature-disposition.adoc[ADR 0006]
+
+== Status
+
+Accepted for `EXT-59`.
+
+This decision amends xref:{runner-lifecycle-decision} and clarifies Phase 2 attachment delivery under xref:{tracker-decision} and xref:{post-b80-decision}.
+
+== Context
+
+Autonomous agent phases run `gh` commands for pull requests and repository checks.
+The Phase 0 environment fixture omits `GH_TOKEN` and `GH_HOST`, while `vendor/stokowski@4a40a5b` added `GH_TOKEN` pass-through.
+Phase 2 also requires real artifact uploads on both `Stokowski.Tracker.Lc` and `Stokowski.Tracker.Gh`, not only on a fake adapter.
+The pinned `vendor/linear-cli` (`v2.12.0`) has no file-upload command yet, and GitHub Issues exposes no public binary comment-attachment API.
+
+== Decision
+
+=== Runner and hook environment allowlist
+
+Add `GH_TOKEN` and `GH_HOST` to the explicit project environment allowlist in `Stokowski.Environment` and update `apps/stokowski/test/fixtures/runners/environment.yaml`.
+Fantasia continues to enforce the allowlist at the final spawn boundary and redact secret values from all diagnostics.
+
+=== Real attachment uploads for `lc` and `gh`
+
+Both `Stokowski.Tracker.Lc` and `Stokowski.Tracker.Gh` must wire real `attach_artifact` execution in Phase 2 while keeping the CLI-only boundary of xref:{tracker-decision}.
+Fantasia must not open a direct Linear GraphQL or GitHub HTTP connection to upload files.
+For `Stokowski.Tracker.Lc`, add an unattended file-upload command to `vendor/linear-cli` first, then advance the submodule pin and consume its JSON output.
+For `Stokowski.Tracker.Gh`, upload bounded evidence through unattended `gh` CLI commands to a configured repository artifact target and return the URL.
+Local workspace copies stay intact until the upload effect reconciles.
+
+== Consequences
+
+Agents and hooks can authenticate `gh` commands through explicit configuration without exposing ambient parent secrets.
+Slice 4 of `EXT-59` requires a small upstream `vendor/linear-cli` upload command before `Stokowski.Tracker.Lc` attachment tests run against real CLI output.
+Both production trackers preserve the CLI-only transport rule while supporting evidence artifacts.
