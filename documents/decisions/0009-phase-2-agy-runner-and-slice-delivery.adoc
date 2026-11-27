@@ -1,0 +1,57 @@
+= {my-title}
+Tj Vanderpoel (bougyman) <bougyman@users.noreply.github.com>
+:revdate: Nov 26, 2026
+:my-title: ADR 0009: Phase 2 Agy runner and stacked slice delivery
+:icons: font
+:env-github:
+ifdef::env-github[]
+:tip-caption: :bulb:
+:note-caption: :information_source:
+:important-caption: :heavy_exclamation_mark:
+:caution-caption: :fire:
+:warning-caption: :warning:
+endif::[]
+
+:initial-plan: ../plans/initial-plan.adoc[the initial Elixir port plan]
+:runner-decision: pluggable-runner-interface-decision.adoc[the pluggable runner decision]
+:devex-plan: ../plans/devex-ci-and-release-please-plan.adoc[the DevEx CI plan]
+
+== Status
+
+Accepted for `EXT-59`.
+
+This decision amends xref:{runner-decision} and xref:{initial-plan}.
+
+== Context
+
+Both xref:{initial-plan} and xref:{runner-decision} limit the initial compatibility release to Claude Code and Codex as production runners.
+Fantasia must also route deterministic workflow phases to the Antigravity CLI (`agy`).
+Full Phase 2 covers command execution, workspaces, hooks, runners, trackers, and configuration routing.
+Delivery as one large pull request increases review risk.
+
+== Decision
+
+=== Built-in Agy runner in Phase 2
+
+Phase 2 includes `Stokowski.Runner.Agy` as a built-in production runner adapter beside `Stokowski.Runner.Claude` and `Stokowski.Runner.Codex`.
+The adapter uses `Stokowski.Command` with closed stdin and direct execution of `agy` in print mode (`--print --output-format stream-json`).
+It maps normalized model, unified `effort`, session resume (`--resume`), and permission mode flags through the shared `Stokowski.Runner` contract.
+A fake conformance adapter remains required so the shared runner conformance suite still proves adapter-only extensibility without core changes.
+
+=== Stacked vertical slices and deferrals
+
+Phase 2 (`EXT-59`) delivers as five stacked vertical slices:
+
+. `Stokowski.Command`, `Stokowski.Environment`, and `Stokowski.Redaction`.
+. `Stokowski.Workspace`, lifecycle hooks, and bounded evidence collection.
+. `Stokowski.Runner`, `Stokowski.Runner.Registry`, `Claude`, `Codex`, `Agy`, and the shared runner conformance suite.
+. `Stokowski.Tracker`, `Stokowski.Tracker.Registry`, `Lc`, `Gh`, attachment uploads, and the shared tracker conformance suite.
+. `Stokowski.Config` registry integration, label-routing parity, and end-to-end Phase 2 acceptance tests.
+
+Blocked phase transitions (`blocked` trigger) and `mix ci` from xref:{devex-plan} remain outside `EXT-59` as separate follow-up work.
+
+== Consequences
+
+Fantasia proves its pluggable runner boundary with three real coding-agent CLIs (`claude`, `codex`, and `agy`) and a fake adapter in Phase 2.
+Each stacked slice stays small enough for independent review and offline test verification.
+Pinning `agy` protocol fixtures becomes part of Phase 2 acceptance.
